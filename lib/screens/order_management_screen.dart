@@ -3,17 +3,18 @@ import '../models/order_model.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/order_card.dart';
+import 'new_order_screen.dart';
 
 /// Order Management screen - View and manage customer orders
 class OrderManagementScreen extends StatefulWidget {
-  const OrderManagementScreen({Key? key}) : super(key: key);
+  const OrderManagementScreen({super.key});
 
   @override
   State<OrderManagementScreen> createState() => _OrderManagementScreenState();
 }
 
 class _OrderManagementScreenState extends State<OrderManagementScreen> {
-  OrderStatus _selectedFilter = OrderStatus.pending;
+  OrderStatus? _selectedFilter; // null means "All"
   final List<Order> _mockOrders = [];
 
   @override
@@ -29,6 +30,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
       appBar: AppBar(
         backgroundColor: AppConstants.darkSecondary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            if (scaffoldState != null) {
+              scaffoldState.openDrawer();
+            }
+          },
+        ),
         title: Row(
           children: [
             Icon(
@@ -85,42 +95,70 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(
             horizontal: AppConstants.paddingMedium),
-        children: OrderStatus.values.map((status) {
-          final isSelected = _selectedFilter == status;
-          return Padding(
+        children: [
+          // "All" filter option
+          Padding(
             padding: const EdgeInsets.only(right: AppConstants.paddingSmall),
             child: FilterChip(
               label: Text(
-                status.toString().split('.').last.toUpperCase(),
+                'ALL',
                 style: TextStyle(
-                  color: isSelected
+                  color: _selectedFilter == null
                       ? Colors.white
                       : AppConstants.textSecondary,
                   fontWeight:
-                      isSelected ? FontWeight.bold : FontWeight.normal,
+                      _selectedFilter == null ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
-              selected: isSelected,
+              selected: _selectedFilter == null,
               onSelected: (selected) {
                 setState(() {
-                  _selectedFilter = status;
+                  _selectedFilter = null;
                 });
               },
               backgroundColor: AppConstants.cardBackground,
               selectedColor: AppConstants.primaryOrange,
               checkmarkColor: Colors.white,
             ),
-          );
-        }).toList(),
+          ),
+          // Status filters
+          ...OrderStatus.values.map((status) {
+            final isSelected = _selectedFilter == status;
+            return Padding(
+              padding: const EdgeInsets.only(right: AppConstants.paddingSmall),
+              child: FilterChip(
+                label: Text(
+                  status.toString().split('.').last.toUpperCase(),
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : AppConstants.textSecondary,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    _selectedFilter = status;
+                  });
+                },
+                backgroundColor: AppConstants.cardBackground,
+                selectedColor: AppConstants.primaryOrange,
+                checkmarkColor: Colors.white,
+              ),
+            );
+          }).toList(),
+        ],
       ),
     );
   }
 
   /// Orders list
   Widget _buildOrdersList() {
-    final filteredOrders = _mockOrders
-        .where((order) => order.status == _selectedFilter)
-        .toList();
+    final filteredOrders = _selectedFilter == null
+        ? _mockOrders
+        : _mockOrders.where((order) => order.status == _selectedFilter).toList();
 
     if (filteredOrders.isEmpty) {
       return Center(
@@ -128,13 +166,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.inbox_outlined,
+              Icons.receipt_long_outlined,
               size: 80,
-              color: AppConstants.textSecondary,
+              color: AppConstants.textSecondary.withOpacity(0.5),
             ),
             const SizedBox(height: AppConstants.paddingMedium),
             Text(
-              'No ${_selectedFilter.toString().split('.').last} orders',
+              _selectedFilter == null
+                  ? 'No orders yet'
+                  : 'No ${_selectedFilter.toString().split('.').last} orders',
               style: AppConstants.headingSmall.copyWith(
                 color: AppConstants.textSecondary,
               ),
@@ -165,23 +205,42 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
         title: const Text('Filter Orders', style: AppConstants.headingSmall),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: OrderStatus.values.map((status) {
-            return RadioListTile<OrderStatus>(
-              title: Text(
-                status.toString().split('.').last.toUpperCase(),
+          children: [
+            // "All" option
+            RadioListTile<OrderStatus?>(
+              title: const Text(
+                'ALL',
                 style: AppConstants.bodyMedium,
               ),
-              value: status,
+              value: null,
               groupValue: _selectedFilter,
               activeColor: AppConstants.primaryOrange,
               onChanged: (value) {
                 setState(() {
-                  _selectedFilter = value!;
+                  _selectedFilter = value;
                 });
                 Navigator.pop(context);
               },
-            );
-          }).toList(),
+            ),
+            // Status options
+            ...OrderStatus.values.map((status) {
+              return RadioListTile<OrderStatus?>(
+                title: Text(
+                  status.toString().split('.').last.toUpperCase(),
+                  style: AppConstants.bodyMedium,
+                ),
+                value: status,
+                groupValue: _selectedFilter,
+                activeColor: AppConstants.primaryOrange,
+                onChanged: (value) {
+                  setState(() {
+                    _selectedFilter = value;
+                  });
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ],
         ),
       ),
     );
@@ -259,10 +318,10 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
 
   /// Create new order
   void _createNewOrder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Create new order feature coming soon!'),
-        backgroundColor: AppConstants.primaryOrange,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const NewOrderScreen(),
       ),
     );
   }

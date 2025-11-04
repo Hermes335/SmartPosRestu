@@ -8,10 +8,10 @@ class StaffCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const StaffCard({
-    Key? key,
+    super.key,
     required this.staff,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

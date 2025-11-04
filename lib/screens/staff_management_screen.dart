@@ -5,7 +5,7 @@ import '../widgets/staff_card.dart';
 
 /// Staff Management screen - View staff and their performance
 class StaffManagementScreen extends StatefulWidget {
-  const StaffManagementScreen({Key? key}) : super(key: key);
+  const StaffManagementScreen({super.key});
 
   @override
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
@@ -28,6 +28,15 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       appBar: AppBar(
         backgroundColor: AppConstants.darkSecondary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            if (scaffoldState != null) {
+              scaffoldState.openDrawer();
+            }
+          },
+        ),
         title: Row(
           children: [
             Icon(
@@ -196,7 +205,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   Navigator.pop(context);
                 },
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

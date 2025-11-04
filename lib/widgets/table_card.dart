@@ -8,10 +8,10 @@ class TableCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const TableCard({
-    Key? key,
+    super.key,
     required this.table,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

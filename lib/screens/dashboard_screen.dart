@@ -6,7 +6,7 @@ import '../widgets/stat_card.dart';
 
 /// Sales Dashboard - Home screen with key metrics and quick stats
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -20,6 +20,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         backgroundColor: AppConstants.darkSecondary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            if (scaffoldState != null) {
+              scaffoldState.openDrawer();
+            }
+          },
+        ),
         title: Row(
           children: [
             Icon(

@@ -5,7 +5,7 @@ import '../widgets/table_card.dart';
 
 /// Table Management screen - View and manage restaurant tables
 class TableManagementScreen extends StatefulWidget {
-  const TableManagementScreen({Key? key}) : super(key: key);
+  const TableManagementScreen({super.key});
 
   @override
   State<TableManagementScreen> createState() => _TableManagementScreenState();
@@ -28,6 +28,15 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
       appBar: AppBar(
         backgroundColor: AppConstants.darkSecondary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            if (scaffoldState != null) {
+              scaffoldState.openDrawer();
+            }
+          },
+        ),
         title: Row(
           children: [
             Icon(
@@ -201,7 +210,7 @@ class _TableManagementScreenState extends State<TableManagementScreen> {
                   Navigator.pop(context);
                 },
               );
-            }).toList(),
+            }),
           ],
         ),
       ),

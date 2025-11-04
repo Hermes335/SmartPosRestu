@@ -9,10 +9,10 @@ class OrderCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   const OrderCard({
-    Key? key,
+    super.key,
     required this.order,
     this.onTap,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

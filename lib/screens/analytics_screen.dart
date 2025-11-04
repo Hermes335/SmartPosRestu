@@ -7,7 +7,7 @@ import '../utils/formatters.dart';
 
 /// Sales & Performance Analysis screen with AI forecasting
 class AnalyticsScreen extends StatefulWidget {
-  const AnalyticsScreen({Key? key}) : super(key: key);
+  const AnalyticsScreen({super.key});
 
   @override
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
@@ -41,6 +41,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       appBar: AppBar(
         backgroundColor: AppConstants.darkSecondary,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            if (scaffoldState != null) {
+              scaffoldState.openDrawer();
+            }
+          },
+        ),
         title: Row(
           children: [
             Icon(
