@@ -26,6 +26,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   String _selectedHistoricalRange = 'This Week';
   String _selectedForecastRange = '7 Days';
   
+  // Date range picker
+  DateTime? _startDate;
+  DateTime? _endDate;
+  
   // Comparison overlay
   bool _showComparisonOverlay = false;
 
@@ -131,23 +135,64 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Date range selector
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Historical Analysis',
-                style: AppConstants.headingSmall,
-              ),
-              _buildDateRangeDropdown(
-                value: _selectedHistoricalRange,
-                items: ['Today', 'Yesterday', 'This Week', 'Last Week', 'This Month'],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedHistoricalRange = value!;
-                  });
-                },
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(AppConstants.paddingMedium),
+            decoration: BoxDecoration(
+              color: AppConstants.cardBackground,
+              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+              border: Border.all(color: AppConstants.dividerColor),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _dateRangeText,
+                        style: AppConstants.bodyMedium,
+                      ),
+                    ),
+                    if (_startDate != null)
+                      IconButton(
+                        onPressed: _clearDates,
+                        icon: const Icon(Icons.clear),
+                        color: AppConstants.textSecondary,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickSingleDate,
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: const Text('Single Date'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.darkSecondary,
+                          foregroundColor: AppConstants.primaryOrange,
+                          side: const BorderSide(color: AppConstants.primaryOrange),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickDateRange,
+                        icon: const Icon(Icons.date_range, size: 18),
+                        label: const Text('Date Range'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.darkSecondary,
+                          foregroundColor: AppConstants.primaryOrange,
+                          side: const BorderSide(color: AppConstants.primaryOrange),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: AppConstants.paddingMedium),
           
@@ -1151,6 +1196,79 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ],
       ),
     );
+  }
+
+  /// Date range text
+  String get _dateRangeText {
+    if (_startDate == null) return 'Showing: All dates';
+    if (_endDate == null) return 'Showing: ${Formatters.formatDate(_startDate!)}';
+    return 'Showing: ${Formatters.formatDate(_startDate!)} - ${Formatters.formatDate(_endDate!)}';
+  }
+
+  /// Pick date range
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: _startDate != null && _endDate != null
+          ? DateTimeRange(start: _startDate!, end: _endDate!)
+          : null,
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
+      lastDate: DateTime.now(), // Restrict to present day and earlier
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppConstants.primaryOrange,
+            onPrimary: Colors.white,
+            surface: AppConstants.cardBackground,
+            onSurface: AppConstants.textPrimary,
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+      });
+    }
+  }
+
+  /// Pick single date
+  Future<void> _pickSingleDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate ?? DateTime.now(),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
+      lastDate: DateTime.now(), // Restrict to present day and earlier
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: ColorScheme.dark(
+            primary: AppConstants.primaryOrange,
+            onPrimary: Colors.white,
+            surface: AppConstants.cardBackground,
+            onSurface: AppConstants.textPrimary,
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked;
+        _endDate = null;
+      });
+    }
+  }
+
+  /// Clear dates
+  void _clearDates() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+    });
   }
 
   /// Load analytics data

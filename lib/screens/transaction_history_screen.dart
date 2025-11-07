@@ -58,7 +58,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           ? DateTimeRange(start: _startDate!, end: _endDate!)
           : null,
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: DateTime.now(), // Restrict to present day and earlier
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: ColorScheme.dark(
@@ -85,7 +85,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
       context: context,
       initialDate: _startDate ?? DateTime.now(),
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      lastDate: DateTime.now(), // Restrict to present day and earlier
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: ColorScheme.dark(
