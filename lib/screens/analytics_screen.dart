@@ -1892,7 +1892,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Date range text
   String get _dateRangeText {
-    if (_startDate == null) return 'Showing: All dates';
+    if (_startDate == null) return 'Showing: ${Formatters.formatDate(DateTime.now())}';
     if (_endDate == null) return 'Showing: ${Formatters.formatDate(_startDate!)}';
     return 'Showing: ${Formatters.formatDate(_startDate!)} - ${Formatters.formatDate(_endDate!)}';
   }
