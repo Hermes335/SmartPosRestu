@@ -27,10 +27,11 @@ android {
         applicationId = "com.example.smart_restupos"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = flutter.minSdkVersion  // Firebase requires minimum SDK 21
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true  // Required for Firebase
     }
 
     buildTypes {

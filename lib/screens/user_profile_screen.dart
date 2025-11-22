@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../utils/constants.dart';
+import 'login_screen.dart';
 import '../utils/formatters.dart';
 
 class UserProfileScreen extends StatefulWidget {
@@ -470,15 +473,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              Navigator.pop(context); // Go back to previous screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logged out successfully'),
-                  backgroundColor: AppConstants.successGreen,
-                ),
-              );
+              
+              // Sign out from Firebase
+              final authService = Provider.of<AuthService>(context, listen: false);
+              final result = await authService.signOut();
+              
+              if (result['success'] && mounted) {
+                // Navigate to login screen and clear navigation stack
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(result['message']),
+                    backgroundColor: AppConstants.successGreen,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.errorRed,

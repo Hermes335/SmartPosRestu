@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/order_management_screen.dart';
@@ -11,6 +12,8 @@ import 'screens/transaction_history_screen.dart';
 import 'screens/sales_history_screen.dart';
 import 'screens/user_profile_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/login_screen.dart';
+import 'services/auth_service.dart';
 import 'utils/constants.dart';
 
 /// Main entry point of the SmartServe POS application
@@ -31,10 +34,16 @@ class SmartServePOS extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: AppConstants.appName,
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+    return MultiProvider(
+      providers: [
+        Provider<AuthService>(
+          create: (_) => AuthService(),
+        ),
+      ],
+      child: MaterialApp(
+        title: AppConstants.appName,
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
         // Dark theme configuration
         brightness: Brightness.dark,
         scaffoldBackgroundColor: AppConstants.darkBackground,
@@ -84,7 +93,57 @@ class SmartServePOS extends StatelessWidget {
           bodySmall: AppConstants.bodySmall,
         ),
       ),
-      home: const MainNavigationScreen(),
+        home: const AuthWrapper(),
+      ),
+    );
+  }
+}
+
+/// Authentication Wrapper
+/// Redirects users to login or main app based on auth state
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: false);
+
+    return StreamBuilder(
+      stream: authService.authStateChanges,
+      builder: (context, snapshot) {
+        // Show loading while checking auth state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppConstants.darkBackground,
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    color: AppConstants.primaryOrange,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading...',
+                    style: AppConstants.bodyLarge.copyWith(
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        // Check if user is authenticated
+        if (snapshot.hasData && snapshot.data != null) {
+          // User is logged in, show main app
+          return const MainNavigationScreen();
+        }
+
+        // User is not logged in, show login screen
+        return const LoginScreen();
+      },
     );
   }
 }
@@ -484,14 +543,23 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Logged out successfully'),
-                  backgroundColor: AppConstants.successGreen,
-                ),
-              );
+              final authService = Provider.of<AuthService>(context, listen: false);
+              final result = await authService.signOut();
+              if (result['success'] && context.mounted) {
+                // Navigate to login screen
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(result['message']),
+                    backgroundColor: AppConstants.successGreen,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppConstants.errorRed,
