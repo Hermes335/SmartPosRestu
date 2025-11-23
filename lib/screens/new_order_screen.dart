@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../models/menu_item_model.dart';
+import '../services/menu_service.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_item_bottom_sheet.dart';
@@ -14,9 +18,14 @@ class NewOrderScreen extends StatefulWidget {
 
 class _NewOrderScreenState extends State<NewOrderScreen> {
   MenuCategory? _selectedCategory; // null means "All Items"
+  String? _selectedCategoryLabel;
+  final MenuService _menuService = MenuService();
+  StreamSubscription<List<MenuItem>>? _menuSubscription;
+
   final Map<String, int> _cart = {}; // itemId -> quantity
   final List<MenuItem> _menuItems = [];
   String _searchQuery = '';
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -24,113 +33,98 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     _loadMenuItems();
   }
 
+  @override
+  void dispose() {
+    _menuSubscription?.cancel();
+    super.dispose();
+  }
+
   /// Load menu items
   void _loadMenuItems() {
-    setState(() {
-      _menuItems.addAll([
-        // Main Course
-        MenuItem(
-          id: 'MENU001',
-          name: 'Spicy Edamame',
-          description: 'Steamed edamame tossed with chili garlic sauce, a classic appetizer',
-          price: 7.50,
-          category: MenuCategory.mainCourse,
-          isAvailable: true,
-          salesCount: 145,
+    setState(() => _isLoading = true);
+
+    _menuSubscription?.cancel();
+    _menuSubscription = _menuService.getMenuItemsStream().listen(
+      (items) {
+        if (!mounted) return;
+        setState(() {
+          _menuItems
+            ..clear()
+            ..addAll(items);
+          _isLoading = false;
+          _removeInvalidCartItems();
+        });
+      },
+      onError: (error) {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load menu: $error'),
+            backgroundColor: AppConstants.errorRed,
+          ),
+        );
+      },
+    );
+  }
+
+  void _removeInvalidCartItems() {
+    final validIds = _menuItems.map((item) => item.id).toSet();
+    _cart.removeWhere((itemId, _) => !validIds.contains(itemId));
+  }
+
+  MenuItem? _findMenuItemById(String id) {
+    try {
+      return _menuItems.firstWhere((item) => item.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<_CategoryFilter> get _categoryFilters {
+    final order = {
+      MenuCategory.mainCourse: 0,
+      MenuCategory.appetizer: 1,
+      MenuCategory.dessert: 2,
+      MenuCategory.beverage: 3,
+      MenuCategory.special: 4,
+    };
+
+    final Map<String, _CategoryFilter> filters = {};
+    for (final item in _menuItems) {
+      if (!item.isAvailable) {
+        continue;
+      }
+      final key = '${item.category.name}|${item.categoryLabel.toLowerCase()}';
+      filters.putIfAbsent(
+        key,
+        () => _CategoryFilter(
+          category: item.category,
+          label: item.categoryLabel,
+          icon: _getCategoryIcon(item.category),
         ),
-      MenuItem(
-        id: 'MENU002',
-        name: 'Crispy Spring Rolls',
-        description: 'Hand-rolled vegetable spring rolls served with sweet chili dipping',
-        price: 9.00,
-        category: MenuCategory.mainCourse,
-        isAvailable: true,
-        salesCount: 132,
-      ),
-      MenuItem(
-        id: 'MENU003',
-        name: 'Grilled Salmon',
-        description: 'Perfectly seared salmon fillet with lemon asparagus and herbs',
-        price: 22.00,
-        category: MenuCategory.mainCourse,
-        isAvailable: true,
-        salesCount: 98,
-      ),
-      MenuItem(
-        id: 'MENU004',
-        name: 'Margherita Pizza',
-        description: 'Classic Italian pizza with tomato, mozzarella, and fresh basil',
-        price: 15.00,
-        category: MenuCategory.mainCourse,
-        isAvailable: true,
-        salesCount: 210,
-      ),
-      MenuItem(
-        id: 'MENU005',
-        name: 'Pasta Carbonara',
-        description: 'Creamy pasta with bacon, eggs, and parmesan cheese',
-        price: 17.00,
-        category: MenuCategory.mainCourse,
-        isAvailable: true,
-        salesCount: 156,
-      ),
-      
-      // Desserts
-      MenuItem(
-        id: 'MENU006',
-        name: 'Cheesecake',
-        description: 'Classic New York style cheesecake topped with a homemade berry compote',
-        price: 10.00,
-        category: MenuCategory.dessert,
-        isAvailable: true,
-        salesCount: 89,
-      ),
-      MenuItem(
-        id: 'MENU007',
-        name: 'Tiramisu',
-        description: 'Layers of coffee-soaked ladyfingers, mascarpone and cocoa',
-        price: 9.50,
-        category: MenuCategory.dessert,
-        isAvailable: true,
-        salesCount: 76,
-      ),
-      
-      // Beverages
-      MenuItem(
-        id: 'MENU008',
-        name: 'Fresh Orange Juice',
-        description: 'Freshly squeezed oranges, pure and refreshing',
-        price: 5.00,
-        category: MenuCategory.beverage,
-        isAvailable: true,
-        salesCount: 201,
-      ),
-      MenuItem(
-        id: 'MENU009',
-        name: 'Espresso',
-        description: 'Rich, intense shot of concentrated coffee',
-        price: 3.50,
-        category: MenuCategory.beverage,
-        isAvailable: true,
-        salesCount: 312,
-      ),
-      MenuItem(
-        id: 'MENU010',
-        name: 'Iced Latte',
-        description: 'Smooth espresso with cold milk over ice',
-        price: 5.50,
-        category: MenuCategory.beverage,
-        isAvailable: true,
-        salesCount: 267,
-      ),
-    ]);
-    });
+      );
+    }
+
+    final filterList = filters.values.toList()
+      ..sort((a, b) {
+        final orderDiff = (order[a.category] ?? 99) - (order[b.category] ?? 99);
+        if (orderDiff != 0) {
+          return orderDiff;
+        }
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      });
+
+    return filterList;
   }
 
   /// Get filtered menu items
   List<MenuItem> get _filteredItems {
     return _menuItems.where((item) {
-      final matchesCategory = _selectedCategory == null || item.category == _selectedCategory;
+      final matchesCategory = _selectedCategory == null ||
+          (item.category == _selectedCategory &&
+              (_selectedCategoryLabel == null ||
+                  item.categoryLabel == _selectedCategoryLabel));
       final matchesSearch = _searchQuery.isEmpty ||
           item.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           item.description.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -142,8 +136,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   double get _totalAmount {
     double total = 0;
     _cart.forEach((itemId, quantity) {
-      final item = _menuItems.firstWhere((i) => i.id == itemId);
-      total += item.price * quantity;
+      final item = _findMenuItemById(itemId);
+      if (item != null) {
+        total += item.price * quantity;
+      }
     });
     return total;
   }
@@ -258,6 +254,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   /// Build category tabs
   Widget _buildCategoryTabs() {
+    final categories = _categoryFilters;
+
     return Container(
       height: 100,
       color: AppConstants.darkSecondary,
@@ -273,32 +271,33 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             Icons.restaurant_menu,
             null, // null means show all categories
           ),
-          _buildCategoryTab(
-            'Main',
-            Icons.dinner_dining,
-            MenuCategory.mainCourse,
-          ),
-          _buildCategoryTab(
-            'Sides',
-            Icons.rice_bowl,
-            MenuCategory.appetizer,
-          ),
-          _buildCategoryTab(
-            'Desserts',
-            Icons.cake,
-            MenuCategory.dessert,
+          ...categories.map(
+            (filter) => _buildCategoryTab(
+              filter.label,
+              filter.icon,
+              filter.category,
+              categoryLabel: filter.label,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildCategoryTab(String label, IconData icon, MenuCategory? category) {
-    final isSelected = _selectedCategory == category;
+  Widget _buildCategoryTab(
+    String label,
+    IconData icon,
+    MenuCategory? category, {
+    String? categoryLabel,
+  }) {
+    final isSelected = category == null
+        ? _selectedCategory == null
+        : _selectedCategory == category && _selectedCategoryLabel == categoryLabel;
     return GestureDetector(
       onTap: () {
         setState(() {
           _selectedCategory = category;
+          _selectedCategoryLabel = category == null ? null : categoryLabel;
         });
       },
       child: Container(
@@ -336,6 +335,19 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   /// Build menu list
   Widget _buildMenuList() {
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppConstants.primaryOrange),
+            const SizedBox(height: AppConstants.paddingMedium),
+            Text('Loading menu...', style: AppConstants.bodyMedium),
+          ],
+        ),
+      );
+    }
+
     if (_filteredItems.isEmpty) {
       return Center(
         child: Column(
@@ -426,6 +438,13 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                   style: AppConstants.bodyLarge.copyWith(
                     color: AppConstants.primaryOrange,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  item.categoryLabel,
+                  style: AppConstants.bodySmall.copyWith(
+                    color: AppConstants.textSecondary,
                   ),
                 ),
               ],
@@ -608,7 +627,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       context: context,
       builder: (context) => _CompleteOrderDialog(
         cart: _cart,
-        menuItems: _menuItems,
+        menuItems: List<MenuItem>.from(_menuItems),
         totalAmount: _totalAmount,
         onComplete: (tableNumber, notes) {
           _completeOrder(tableNumber, notes);
@@ -648,6 +667,18 @@ class _CompleteOrderDialog extends StatefulWidget {
 
   @override
   State<_CompleteOrderDialog> createState() => _CompleteOrderDialogState();
+}
+
+class _CategoryFilter {
+  const _CategoryFilter({
+    required this.category,
+    required this.label,
+    required this.icon,
+  });
+
+  final MenuCategory category;
+  final String label;
+  final IconData icon;
 }
 
 class _CompleteOrderDialogState extends State<_CompleteOrderDialog> {

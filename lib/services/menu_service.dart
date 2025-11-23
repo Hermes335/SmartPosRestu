@@ -14,6 +14,121 @@ class MenuService {
   );
 
   DatabaseReference get _menuRef => _databaseInstance.ref('menu');
+  DatabaseReference get _metaRef => _databaseInstance.ref('meta');
+
+  static final RegExp _menuIdPattern = RegExp(r'^MENU(\d+)$');
+
+  Future<void> _ensureMenuCounterInitialized() async {
+    final counterRef = _metaRef.child('nextMenuNumber');
+    final snapshot = await counterRef.get();
+    if (snapshot.exists) {
+      final value = snapshot.value;
+      if (value is int || value is double) {
+        return;
+      }
+    }
+
+    final highest = await _calculateHighestMenuNumber();
+    await counterRef.set(highest);
+  }
+
+  Future<int> _calculateHighestMenuNumber() async {
+    int highest = 0;
+    try {
+      final snapshot = await _menuRef.get();
+      if (snapshot.exists && snapshot.value is Map) {
+        final menuMap = snapshot.value as Map<dynamic, dynamic>;
+        for (final entry in menuMap.entries) {
+          final key = entry.key.toString();
+          final keyNumber = _extractMenuNumber(key);
+          if (keyNumber != null && keyNumber > highest) {
+            highest = keyNumber;
+          }
+
+          final value = entry.value;
+          if (value is Map && value['id'] is String) {
+            final valueNumber = _extractMenuNumber(value['id'] as String);
+            if (valueNumber != null && valueNumber > highest) {
+              highest = valueNumber;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating highest menu number: $e');
+    }
+    return highest;
+  }
+
+  int? _extractMenuNumber(String id) {
+    final match = _menuIdPattern.firstMatch(id);
+    if (match == null) {
+      return null;
+    }
+    return int.tryParse(match.group(1)!);
+  }
+
+  String _formatMenuId(int number) {
+    return 'MENU${number.toString().padLeft(3, '0')}';
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is double) {
+      return value.toInt();
+    }
+    return 0;
+  }
+
+  /// Generate the next sequential menu ID using a database-backed counter
+  Future<String> generateNextMenuId() async {
+    final counterRef = _metaRef.child('nextMenuNumber');
+    try {
+      await _ensureMenuCounterInitialized();
+      final result = await counterRef.runTransaction((mutableData) {
+        final dynamic data = mutableData;
+        final current = _asInt(data.value);
+        final nextValue = current + 1;
+        data.value = nextValue;
+        return Transaction.success(data);
+      });
+
+      final nextNumber = _asInt(result.snapshot.value);
+      return _formatMenuId(nextNumber);
+    } catch (e) {
+      print('Error generating next menu ID: $e');
+      final fallback = (await _calculateHighestMenuNumber()) + 1;
+      try {
+        await counterRef.set(fallback);
+      } catch (_) {
+        // Ignore secondary errors; fallback formatting still returns usable ID
+      }
+      return _formatMenuId(fallback);
+    }
+  }
+
+  /// Normalize a menu item's ID to the sequential format if needed
+  Future<MenuItem?> normalizeMenuItemId(MenuItem item) async {
+    if (_menuIdPattern.hasMatch(item.id)) {
+      return null;
+    }
+
+    try {
+      final newId = await generateNextMenuId();
+      final updatedItem = item.copyWith(id: newId);
+
+      await _menuRef.child(newId).set(updatedItem.toJson());
+      await _menuRef.child(item.id).remove();
+
+      print('🔄 Normalized menu ID from ${item.id} to $newId');
+      return updatedItem;
+    } catch (e) {
+      print('Error normalizing menu ID for ${item.id}: $e');
+      return null;
+    }
+  }
 
   /// Get all menu items as a stream
   Stream<List<MenuItem>> getMenuItemsStream() {

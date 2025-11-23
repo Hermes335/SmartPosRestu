@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/menu_item_model.dart';
 import '../services/menu_service.dart';
@@ -20,6 +22,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
   List<MenuItem> _menuItems = [];
   String _searchQuery = '';
   bool _isLoading = true;
+  bool _isNormalizingIds = false;
   
   // Custom categories storage (label, icon, category)
   final List<Map<String, dynamic>> _customCategories = [
@@ -41,6 +44,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
     
     // Listen to real-time updates from Firebase
     _menuService.getMenuItemsStream().listen((items) {
+      unawaited(_normalizeMenuItemIds(items));
       if (mounted) {
         setState(() {
           _menuItems = items;
@@ -58,6 +62,32 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
         );
       }
     });
+  }
+
+  static final RegExp _menuIdPattern = RegExp(r'^MENU\d{3,}$');
+
+  bool _isValidMenuId(String id) => _menuIdPattern.hasMatch(id);
+
+  Future<void> _normalizeMenuItemIds(List<MenuItem> items) async {
+    if (_isNormalizingIds) {
+      return;
+    }
+
+    final invalidItems = items.where((item) => !_isValidMenuId(item.id)).toList();
+    if (invalidItems.isEmpty) {
+      return;
+    }
+
+    _isNormalizingIds = true;
+    try {
+      for (final item in invalidItems) {
+        await _menuService.normalizeMenuItemId(item);
+      }
+    } catch (e) {
+      print('Error normalizing menu item IDs: $e');
+    } finally {
+      _isNormalizingIds = false;
+    }
   }
 
   /// Get filtered menu items
@@ -148,6 +178,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
           ),
         ],
       ),
+      // Floating action button removed to avoid blocking list items.
       body: Column(
         children: [
           // Search bar
@@ -293,9 +324,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: isSelected 
-                        ? Colors.white.withOpacity(0.3)
-                        : AppConstants.darkSecondary,
+                    color: Colors.transparent, // made transparent
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -467,23 +496,28 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                           ),
                         ),
                         // Availability toggle
-                        Switch(
-                          value: item.isAvailable,
-                          onChanged: (value) async {
-                            final result = await _menuService.updateItemAvailability(
-                              item.id,
-                              value,
-                            );
-                            if (result['success'] && mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(result['message']),
-                                  backgroundColor: AppConstants.successGreen,
-                                ),
+                        // Smaller switch for compact UI
+                        Transform.scale(
+                          scale: 0.7, // adjust (0.6 - 1.0) to taste
+                          child: Switch(
+                            value: item.isAvailable,
+                            onChanged: (value) async {
+                              final result = await _menuService.updateItemAvailability(
+                                item.id,
+                                value,
                               );
-                            }
-                          },
-                          activeColor: AppConstants.successGreen,
+                              if (result['success'] && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(result['message']),
+                                    backgroundColor: AppConstants.successGreen,
+                                  ),
+                                );
+                              }
+                            },
+                            activeColor: AppConstants.successGreen,
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ],
                     ),
@@ -566,6 +600,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
 
   /// Show add item dialog
   void _showAddItemDialog() {
+    final messenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
     final priceController = TextEditingController();
@@ -698,15 +733,19 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isNotEmpty &&
-                    priceController.text.isNotEmpty) {
-                  // Generate unique ID
-                  final timestamp = DateTime.now().millisecondsSinceEpoch;
-                  final selectedCategory = _customCategories[selectedCategoryIndex];
+                if (nameController.text.isEmpty ||
+                    priceController.text.isEmpty) {
+                  return;
+                }
+
+                try {
+                  final newId = await _menuService.generateNextMenuId();
+                  final selectedCategory =
+                      _customCategories[selectedCategoryIndex];
                   final newItem = MenuItem(
-                    id: 'MENU_$timestamp',
-                    name: nameController.text,
-                    description: descriptionController.text,
+                    id: newId,
+                    name: nameController.text.trim(),
+                    description: descriptionController.text.trim(),
                     price: double.tryParse(priceController.text) ?? 0.0,
                     category: selectedCategory['category'] as MenuCategory,
                     categoryLabel: selectedCategory['label'] as String,
@@ -715,21 +754,30 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
                   );
 
                   Navigator.pop(context);
-                  
+
                   final result = await _menuService.createMenuItem(newItem);
-                  
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['success'] 
-                          ? '${nameController.text} added successfully' 
+
+                  if (!mounted) {
+                    return;
+                  }
+
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(result['success']
+                          ? '${nameController.text.trim()} added successfully'
                           : result['error']),
-                        backgroundColor: result['success']
+                      backgroundColor: result['success']
                           ? AppConstants.successGreen
                           : AppConstants.errorRed,
-                      ),
-                    );
-                  }
+                    ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to add item: $e'),
+                      backgroundColor: AppConstants.errorRed,
+                    ),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -745,6 +793,7 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
 
   /// Show edit item dialog
   void _showEditItemDialog(MenuItem item) {
+    final messenger = ScaffoldMessenger.of(context);
     final nameController = TextEditingController(text: item.name);
     final descriptionController = TextEditingController(text: item.description);
     final priceController = TextEditingController(text: item.price.toString());
@@ -877,37 +926,42 @@ class _ManageMenuScreenState extends State<ManageMenuScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isNotEmpty &&
-                    priceController.text.isNotEmpty) {
-                  final selectedCategory = _customCategories[selectedCategoryIndex];
-                  final updatedItem = MenuItem(
-                    id: item.id,
-                    name: nameController.text,
-                    description: descriptionController.text,
-                    price: double.tryParse(priceController.text) ?? 0.0,
-                    category: selectedCategory['category'] as MenuCategory,
-                    categoryLabel: selectedCategory['label'] as String,
-                    isAvailable: item.isAvailable,
-                    salesCount: item.salesCount,
-                  );
-
-                  Navigator.pop(context);
-                  
-                  final result = await _menuService.updateMenuItem(updatedItem);
-                  
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['success']
-                          ? '${nameController.text} updated successfully'
-                          : result['error']),
-                        backgroundColor: result['success']
-                          ? AppConstants.successGreen
-                          : AppConstants.errorRed,
-                      ),
-                    );
-                  }
+                if (nameController.text.isEmpty ||
+                    priceController.text.isEmpty) {
+                  return;
                 }
+
+                final selectedCategory = _customCategories[selectedCategoryIndex];
+                final updatedItem = MenuItem(
+                  id: item.id,
+                  name: nameController.text.trim(),
+                  description: descriptionController.text.trim(),
+                  price: double.tryParse(priceController.text) ?? 0.0,
+                  category: selectedCategory['category'] as MenuCategory,
+                  categoryLabel: selectedCategory['label'] as String,
+                  isAvailable: item.isAvailable,
+                  salesCount: item.salesCount,
+                  imageUrl: item.imageUrl,
+                );
+
+                Navigator.pop(context);
+
+                final result = await _menuService.updateMenuItem(updatedItem);
+
+                if (!mounted) {
+                  return;
+                }
+
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(result['success']
+                        ? '${nameController.text.trim()} updated successfully'
+                        : result['error']),
+                    backgroundColor: result['success']
+                        ? AppConstants.successGreen
+                        : AppConstants.errorRed,
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppConstants.primaryOrange,
