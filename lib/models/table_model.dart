@@ -1,3 +1,14 @@
+Map<String, dynamic> _stringKeyedTableMap(Map<dynamic, dynamic> source) {
+  final result = <String, dynamic>{};
+  source.forEach((key, value) {
+    if (key == null) {
+      return;
+    }
+    result[key.toString()] = value;
+  });
+  return result;
+}
+
 /// Table model representing a restaurant table
 class RestaurantTable {
   final String id;
@@ -26,15 +37,30 @@ class RestaurantTable {
   }
 
   /// Create from JSON (Firebase)
-  factory RestaurantTable.fromJson(Map<String, dynamic> json) {
+  factory RestaurantTable.fromJson(Map<dynamic, dynamic> json) {
+    final map = json is Map<String, dynamic>
+        ? json
+        : _stringKeyedTableMap(json);
+
+    final id = map['id']?.toString() ?? '';
+    final tableNumber = map['tableNumber']?.toString() ?? '';
+    final capacityValue = map['capacity'];
+    final capacity = capacityValue is int
+        ? capacityValue
+        : int.tryParse(capacityValue?.toString() ?? '') ?? 0;
+    final statusValue = map['status']?.toString() ?? 'available';
+    final status = TableStatus.values.firstWhere(
+      (e) => e.toString().split('.').last == statusValue,
+      orElse: () => TableStatus.available,
+    );
+    final currentOrderId = map['currentOrderId']?.toString();
+
     return RestaurantTable(
-      id: json['id'],
-      tableNumber: json['tableNumber'],
-      capacity: json['capacity'],
-      status: TableStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == json['status'],
-      ),
-      currentOrderId: json['currentOrderId'],
+      id: id,
+      tableNumber: tableNumber,
+      capacity: capacity,
+      status: status,
+      currentOrderId: currentOrderId?.isEmpty == true ? null : currentOrderId,
     );
   }
 

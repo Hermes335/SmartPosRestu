@@ -14,19 +14,129 @@ class TableService {
   );
 
   DatabaseReference get _tablesRef => _databaseInstance.ref('tables');
+  DatabaseReference get _metaRef => _databaseInstance.ref('meta');
 
   DatabaseReference _tableRef(String tableId) =>
       _databaseInstance.ref('tables/$tableId');
+
+  static final RegExp _tableIdPattern = RegExp(r'^TAB(\d+)$');
+
+  Map<String, dynamic>? _stringKeyedMap(dynamic value) {
+    if (value is Map) {
+      final result = <String, dynamic>{};
+      value.forEach((key, mappedValue) {
+        if (key == null) {
+          return;
+        }
+        result[key.toString()] = mappedValue;
+      });
+      return result;
+    }
+    return null;
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is double) {
+      return value.toInt();
+    }
+    return 0;
+  }
+
+  String _formatTableId(int number) {
+    return 'TAB${number.toString().padLeft(3, '0')}';
+  }
+
+  int? _extractTableNumber(String id) {
+    final match = _tableIdPattern.firstMatch(id);
+    if (match == null) {
+      return null;
+    }
+    return int.tryParse(match.group(1)!);
+  }
+
+  Future<void> _ensureTableCounterInitialized() async {
+    final counterRef = _metaRef.child('nextTableNumber');
+    final snapshot = await counterRef.get();
+    if (snapshot.exists) {
+      final value = snapshot.value;
+      if (value is int || value is double) {
+        return;
+      }
+    }
+
+    final highest = await _calculateHighestTableNumber();
+    await counterRef.set(highest);
+  }
+
+  Future<int> _calculateHighestTableNumber() async {
+    int highest = 0;
+    try {
+      final snapshot = await _tablesRef.get();
+      if (snapshot.exists && snapshot.value is Map) {
+        final tableMap = snapshot.value as Map<dynamic, dynamic>;
+        for (final entry in tableMap.entries) {
+          final key = entry.key.toString();
+          final keyNumber = _extractTableNumber(key);
+          if (keyNumber != null && keyNumber > highest) {
+            highest = keyNumber;
+          }
+
+          final value = entry.value;
+          if (value is Map && value['id'] is String) {
+            final valueNumber = _extractTableNumber(value['id'] as String);
+            if (valueNumber != null && valueNumber > highest) {
+              highest = valueNumber;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating highest table number: $e');
+    }
+    return highest;
+  }
+
+  Future<String> generateNextTableId() async {
+    final counterRef = _metaRef.child('nextTableNumber');
+    try {
+      await _ensureTableCounterInitialized();
+      final result = await counterRef.runTransaction((mutableData) {
+        final dynamic data = mutableData;
+        final current = _asInt(data.value);
+        final nextValue = current + 1;
+        data.value = nextValue;
+        return Transaction.success(data);
+      });
+
+      final nextNumber = _asInt(result.snapshot.value);
+      return _formatTableId(nextNumber);
+    } catch (e) {
+      print('Error generating next table ID: $e');
+      final fallback = (await _calculateHighestTableNumber()) + 1;
+      try {
+        await counterRef.set(fallback);
+      } catch (_) {
+        // ignore secondary errors
+      }
+      return _formatTableId(fallback);
+    }
+  }
 
   /// Get all tables stream (real-time updates)
   Stream<List<RestaurantTable>> getTablesStream() {
     return _tablesRef.onValue.map((event) {
       final tables = <RestaurantTable>[];
-      if (event.snapshot.value != null) {
-        final data = event.snapshot.value as Map<dynamic, dynamic>;
+      final data = event.snapshot.value;
+      if (data is Map) {
         data.forEach((key, value) {
-          tables.add(
-              RestaurantTable.fromJson(Map<String, dynamic>.from(value)));
+          final map = _stringKeyedMap(value);
+          if (map == null) {
+            return;
+          }
+          tables.add(RestaurantTable.fromJson(map));
         });
       }
       return tables;
@@ -38,8 +148,11 @@ class TableService {
     try {
       final snapshot = await _tableRef(tableId).get();
       if (snapshot.exists) {
-        return RestaurantTable.fromJson(
-            Map<String, dynamic>.from(snapshot.value as Map));
+        final map = _stringKeyedMap(snapshot.value);
+        if (map == null) {
+          return null;
+        }
+        return RestaurantTable.fromJson(map);
       }
       return null;
     } catch (e) {
@@ -48,10 +161,39 @@ class TableService {
     }
   }
 
+  Future<RestaurantTable?> getTableByNumber(String tableNumber) async {
+    try {
+      final snapshot = await _tablesRef
+          .orderByChild('tableNumber')
+          .equalTo(tableNumber)
+          .limitToFirst(1)
+          .get();
+
+      if (snapshot.exists) {
+        final value = snapshot.value;
+        if (value is Map) {
+          final firstEntry = value.entries.first;
+          final map = _stringKeyedMap(firstEntry.value);
+          if (map != null) {
+            return RestaurantTable.fromJson(map);
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      print('Error getting table by number: $e');
+      return null;
+    }
+  }
+
   /// Create new table
   Future<void> createTable(RestaurantTable table) async {
     try {
-      await _tableRef(table.id).set(table.toJson());
+      var tableId = table.id;
+      if (tableId.isEmpty) {
+        tableId = await generateNextTableId();
+      }
+      await _tableRef(tableId).set(table.copyWith(id: tableId).toJson());
     } catch (e) {
       print('Error creating table: $e');
       rethrow;
@@ -93,6 +235,14 @@ class TableService {
     }
   }
 
+  Future<void> assignOrderToTableByNumber(String tableNumber, String orderId) async {
+    final table = await getTableByNumber(tableNumber);
+    if (table == null) {
+      return;
+    }
+    await assignOrderToTable(table.id, orderId);
+  }
+
   /// Clear table (mark as available)
   Future<void> clearTable(String tableId) async {
     try {
@@ -104,6 +254,14 @@ class TableService {
       print('Error clearing table: $e');
       rethrow;
     }
+  }
+
+  Future<void> clearTableByNumber(String tableNumber) async {
+    final table = await getTableByNumber(tableNumber);
+    if (table == null) {
+      return;
+    }
+    await clearTable(table.id);
   }
 
   /// Delete table
@@ -126,11 +284,16 @@ class TableService {
 
       final tables = <RestaurantTable>[];
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          tables.add(
-              RestaurantTable.fromJson(Map<String, dynamic>.from(value)));
-        });
+        final data = snapshot.value;
+        if (data is Map) {
+          data.forEach((key, value) {
+            final map = _stringKeyedMap(value);
+            if (map == null) {
+              return;
+            }
+            tables.add(RestaurantTable.fromJson(map));
+          });
+        }
       }
       return tables;
     } catch (e) {

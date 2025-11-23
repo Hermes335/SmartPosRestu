@@ -6,6 +6,7 @@ import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/order_card.dart';
 import '../services/order_service.dart';
+import '../services/table_service.dart';
 import 'new_order_screen.dart';
 
 /// Order Management screen - View and manage customer orders
@@ -19,6 +20,7 @@ class OrderManagementScreen extends StatefulWidget {
 class _OrderManagementScreenState extends State<OrderManagementScreen> {
   OrderStatus? _selectedFilter; // null means "All"
   final OrderService _orderService = OrderService();
+  final TableService _tableService = TableService();
   final List<Order> _orders = [];
   StreamSubscription<List<Order>>? _ordersSubscription;
   bool _isLoadingOrders = true;
@@ -74,6 +76,10 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
 
     try {
       await _orderService.updateOrderStatus(order.id, newStatus);
+      String? tableError;
+      if (_shouldReleaseTable(order, newStatus)) {
+        tableError = await _clearTableForOrder(order);
+      }
       if (!mounted) {
         return;
       }
@@ -83,6 +89,16 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
           backgroundColor: AppConstants.successGreen,
         ),
       );
+      if (tableError != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Unable to release Table ${order.tableNumber}: $tableError',
+            ),
+            backgroundColor: AppConstants.errorRed,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -981,6 +997,17 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
 
     try {
       await _orderService.updateOrderStatus(order.id, OrderStatus.completed);
+      final tableError = await _clearTableForOrder(order);
+      if (tableError != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Payment completed but failed to release Table ${order.tableNumber}: $tableError',
+            ),
+            backgroundColor: AppConstants.errorRed,
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) {
         return;
@@ -1137,4 +1164,27 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
     }
   }
 
+  bool _hasTableAssignment(Order order) {
+    final trimmed = order.tableNumber.trim();
+    return trimmed.isNotEmpty && trimmed != 'NO_TABLE';
+  }
+
+  bool _shouldReleaseTable(Order order, OrderStatus status) {
+    if (!_hasTableAssignment(order)) {
+      return false;
+    }
+    return status == OrderStatus.completed || status == OrderStatus.cancelled;
+  }
+
+  Future<String?> _clearTableForOrder(Order order) async {
+    if (!_hasTableAssignment(order)) {
+      return null;
+    }
+    try {
+      await _tableService.clearTableByNumber(order.tableNumber);
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
 }

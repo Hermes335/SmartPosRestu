@@ -6,6 +6,7 @@ import '../models/menu_item_model.dart';
 import '../models/order_model.dart';
 import '../services/menu_service.dart';
 import '../services/order_service.dart';
+import '../services/table_service.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_item_bottom_sheet.dart';
@@ -23,6 +24,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   String? _selectedCategoryLabel;
   final MenuService _menuService = MenuService();
   final OrderService _orderService = OrderService();
+  final TableService _tableService = TableService();
   StreamSubscription<List<MenuItem>>? _menuSubscription;
 
   final Map<String, int> _cart = {}; // itemId -> quantity
@@ -715,6 +717,20 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       );
 
       await _orderService.createOrder(order);
+
+      if (order.tableNumber != 'NO_TABLE') {
+        try {
+          await _tableService.assignOrderToTableByNumber(order.tableNumber, order.id);
+        } catch (e) {
+          // Surface warning but keep order creation successful
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Order saved, but failed to update table: $e'),
+              backgroundColor: AppConstants.warningYellow,
+            ),
+          );
+        }
+      }
 
       if (!mounted) {
         return;

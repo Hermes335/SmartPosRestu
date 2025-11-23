@@ -147,4 +147,25 @@ class Order {
       payNow: (map['payNow'] as bool?) ?? true,
     );
   }
+
+  Order copyWith({
+    String? tableNumber,
+    List<OrderItem>? items,
+    double? totalAmount,
+    DateTime? timestamp,
+    OrderStatus? status,
+    String? notes,
+    bool? payNow,
+  }) {
+    return Order(
+      id: id,
+      tableNumber: tableNumber ?? this.tableNumber,
+      items: items != null ? List<OrderItem>.from(items) : List<OrderItem>.from(this.items),
+      totalAmount: totalAmount ?? this.totalAmount,
+      timestamp: timestamp ?? this.timestamp,
+      status: status ?? this.status,
+      notes: notes ?? this.notes,
+      payNow: payNow ?? this.payNow,
+    );
+  }
 }
