@@ -16,6 +16,10 @@ class OrderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tableLabel = order.tableNumber.trim().isEmpty || order.tableNumber == 'NO_TABLE'
+        ? 'No table'
+        : 'Table ${order.tableNumber}';
+
     return Card(
       color: AppConstants.cardBackground,
       margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
@@ -93,7 +97,7 @@ class OrderCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'Table ${order.tableNumber}',
+                    tableLabel,
                     style: AppConstants.bodyMedium,
                   ),
                   const SizedBox(width: AppConstants.paddingMedium),

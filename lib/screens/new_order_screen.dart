@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/menu_item_model.dart';
+import '../models/order_model.dart';
 import '../services/menu_service.dart';
+import '../services/order_service.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/add_item_bottom_sheet.dart';
@@ -20,12 +22,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   MenuCategory? _selectedCategory; // null means "All Items"
   String? _selectedCategoryLabel;
   final MenuService _menuService = MenuService();
+  final OrderService _orderService = OrderService();
   StreamSubscription<List<MenuItem>>? _menuSubscription;
 
   final Map<String, int> _cart = {}; // itemId -> quantity
   final List<MenuItem> _menuItems = [];
   String _searchQuery = '';
   bool _isLoading = true;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -542,7 +546,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       ),
       child: SafeArea(
         child: ElevatedButton(
-          onPressed: _showCompleteOrderDialog,
+          onPressed: _isSubmitting ? null : _showCompleteOrderDialog,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppConstants.primaryOrange,
             foregroundColor: Colors.white,
@@ -557,7 +561,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               const Icon(Icons.check_circle_outline),
               const SizedBox(width: AppConstants.paddingSmall),
               Text(
-                'Complete Order - ${Formatters.formatCurrency(_totalAmount)}',
+                _isSubmitting
+                    ? 'Processing order...'
+                    : 'Complete Order - ${Formatters.formatCurrency(_totalAmount)}',
                 style: AppConstants.headingSmall.copyWith(color: Colors.white),
               ),
             ],
@@ -623,32 +629,126 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   /// Show complete order dialog
   void _showCompleteOrderDialog() {
-    showDialog(
+    showDialog<_CompleteOrderResult>(
       context: context,
+      barrierDismissible: !_isSubmitting,
       builder: (context) => _CompleteOrderDialog(
-        cart: _cart,
+        cart: Map<String, int>.from(_cart),
         menuItems: List<MenuItem>.from(_menuItems),
         totalAmount: _totalAmount,
-        onComplete: (tableNumber, notes) {
-          _completeOrder(tableNumber, notes);
-        },
+        isSubmitting: _isSubmitting,
+        onComplete: _completeOrder,
       ),
     );
   }
 
   /// Complete order
-  void _completeOrder(String tableNumber, String notes) {
-    // TODO: Save order to Firebase
-    Navigator.pop(context); // Close dialog
-    Navigator.pop(context); // Close new order screen
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Order created for Table $tableNumber!'),
-        backgroundColor: AppConstants.successGreen,
-      ),
-    );
+  Future<void> _completeOrder(_CompleteOrderResult result) async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    if (_cart.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Add at least one item before placing an order.'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+      return;
+    }
+
+    final items = <OrderItem>[];
+    final missingItemIds = <String>[];
+
+    _cart.forEach((itemId, quantity) {
+      final menuItem = _findMenuItemById(itemId);
+      if (menuItem == null) {
+        missingItemIds.add(itemId);
+        return;
+      }
+      items.add(
+        OrderItem(
+          id: menuItem.id,
+          name: menuItem.name,
+          quantity: quantity,
+          price: menuItem.price,
+        ),
+      );
+    });
+
+    if (missingItemIds.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Some menu items are unavailable: ${missingItemIds.join(', ')}'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+      return;
+    }
+
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Unable to build order items. Please try again.'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final orderId = await _orderService.generateNextOrderId();
+      final totalAmount = items.fold<double>(0, (sum, item) => sum + item.totalPrice);
+
+      final order = Order(
+        id: orderId,
+        tableNumber: result.tableNumber,
+        items: items,
+        totalAmount: totalAmount,
+        timestamp: DateTime.now(),
+        status: OrderStatus.pending,
+        notes: (result.notes?.isEmpty ?? true) ? null : result.notes,
+        payNow: result.payNow,
+      );
+
+      await _orderService.createOrder(order);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _isSubmitting = false);
+
+      Navigator.pop(context); // Close dialog
+      Navigator.pop(context, order); // Close new order screen and return order
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create order: $e'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+    }
   }
+}
+
+class _CompleteOrderResult {
+  const _CompleteOrderResult({
+    required this.tableNumber,
+    this.notes,
+    required this.payNow,
+  });
+
+  final String tableNumber;
+  final String? notes;
+  final bool payNow;
 }
 
 /// Complete Order Dialog
@@ -656,13 +756,15 @@ class _CompleteOrderDialog extends StatefulWidget {
   final Map<String, int> cart;
   final List<MenuItem> menuItems;
   final double totalAmount;
-  final Function(String tableNumber, String notes) onComplete;
+  final ValueChanged<_CompleteOrderResult> onComplete;
+  final bool isSubmitting;
 
   const _CompleteOrderDialog({
     required this.cart,
     required this.menuItems,
     required this.totalAmount,
     required this.onComplete,
+    this.isSubmitting = false,
   });
 
   @override
@@ -1009,12 +1111,16 @@ class _CompleteOrderDialogState extends State<_CompleteOrderDialog> {
                   Expanded(
                     flex: 2,
                     child: ElevatedButton(
-                      onPressed: _selectedTable == null
+                      onPressed: _selectedTable == null || widget.isSubmitting
                           ? null
                           : () {
+                              final trimmedNotes = _notesController.text.trim();
                               widget.onComplete(
-                                _selectedTable!,
-                                _notesController.text,
+                                _CompleteOrderResult(
+                                  tableNumber: _selectedTable!,
+                                  notes: trimmedNotes.isEmpty ? null : trimmedNotes,
+                                  payNow: _payNow,
+                                ),
                               );
                             },
                       style: ElevatedButton.styleFrom(
@@ -1025,7 +1131,9 @@ class _CompleteOrderDialogState extends State<_CompleteOrderDialog> {
                           borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
                         ),
                       ),
-                      child: const Text('Place Order'),
+                      child: Text(
+                        widget.isSubmitting ? 'Placing...' : 'Place Order',
+                      ),
                     ),
                   ),
                 ],

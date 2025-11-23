@@ -14,20 +14,133 @@ class OrderService {
   );
 
   DatabaseReference get _ordersRef => _databaseInstance.ref('orders');
+  DatabaseReference get _metaRef => _databaseInstance.ref('meta');
 
   DatabaseReference _orderRef(String orderId) =>
       _databaseInstance.ref('orders/$orderId');
+
+  static final RegExp _orderIdPattern = RegExp(r'^ORD(\d+)$');
+
+  Map<String, dynamic>? _toStringKeyedMap(dynamic value) {
+    if (value is Map) {
+      final result = <String, dynamic>{};
+      value.forEach((key, mappedValue) {
+        if (key == null) {
+          return;
+        }
+        result[key.toString()] = mappedValue;
+      });
+      return result;
+    }
+    return null;
+  }
+
+  int _asInt(dynamic value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is double) {
+      return value.toInt();
+    }
+    return 0;
+  }
+
+  String _formatOrderId(int number) {
+    return 'ORD${number.toString().padLeft(4, '0')}';
+  }
+
+  int? _extractOrderNumber(String id) {
+    final match = _orderIdPattern.firstMatch(id);
+    if (match == null) {
+      return null;
+    }
+    return int.tryParse(match.group(1)!);
+  }
+
+  Future<void> _ensureOrderCounterInitialized() async {
+    final counterRef = _metaRef.child('nextOrderNumber');
+    final snapshot = await counterRef.get();
+    if (snapshot.exists) {
+      final value = snapshot.value;
+      if (value is int || value is double) {
+        return;
+      }
+    }
+
+    final highest = await _calculateHighestOrderNumber();
+    await counterRef.set(highest);
+  }
+
+  Future<int> _calculateHighestOrderNumber() async {
+    int highest = 0;
+    try {
+      final snapshot = await _ordersRef.get();
+      if (snapshot.exists && snapshot.value is Map) {
+        final orderMap = snapshot.value as Map<dynamic, dynamic>;
+        for (final entry in orderMap.entries) {
+          final key = entry.key.toString();
+          final keyNumber = _extractOrderNumber(key);
+          if (keyNumber != null && keyNumber > highest) {
+            highest = keyNumber;
+          }
+
+          final value = entry.value;
+          if (value is Map && value['id'] is String) {
+            final valueNumber = _extractOrderNumber(value['id'] as String);
+            if (valueNumber != null && valueNumber > highest) {
+              highest = valueNumber;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error calculating highest order number: $e');
+    }
+    return highest;
+  }
+
+  /// Generate the next sequential order ID backed by Firebase counter
+  Future<String> generateNextOrderId() async {
+    final counterRef = _metaRef.child('nextOrderNumber');
+    try {
+      await _ensureOrderCounterInitialized();
+      final result = await counterRef.runTransaction((mutableData) {
+        final dynamic data = mutableData;
+        final current = _asInt(data.value);
+        final nextValue = current + 1;
+        data.value = nextValue;
+        return Transaction.success(data);
+      });
+
+      final nextNumber = _asInt(result.snapshot.value);
+      return _formatOrderId(nextNumber);
+    } catch (e) {
+      print('Error generating next order ID: $e');
+      final fallback = (await _calculateHighestOrderNumber()) + 1;
+      try {
+        await counterRef.set(fallback);
+      } catch (_) {
+        // Ignore secondary errors; fallback formatting still returns usable ID
+      }
+      return _formatOrderId(fallback);
+    }
+  }
 
   /// Get orders stream (real-time updates)
   Stream<List<Order>> getOrdersStream() {
     return _ordersRef.onValue.map((event) {
       final orders = <Order>[];
-      if (event.snapshot.value != null) {
-        final data = event.snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          orders.add(Order.fromJson(Map<String, dynamic>.from(value)));
+      final raw = event.snapshot.value;
+      if (raw is Map) {
+        raw.forEach((key, value) {
+          final map = _toStringKeyedMap(value);
+          if (map == null) {
+            return;
+          }
+          orders.add(Order.fromJson(map));
         });
       }
+      orders.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return orders;
     });
   }
@@ -37,8 +150,11 @@ class OrderService {
     try {
       final snapshot = await _orderRef(orderId).get();
       if (snapshot.exists) {
-        return Order.fromJson(
-            Map<String, dynamic>.from(snapshot.value as Map));
+        final map = _toStringKeyedMap(snapshot.value);
+        if (map == null) {
+          return null;
+        }
+        return Order.fromJson(map);
       }
       return null;
     } catch (e) {
@@ -99,10 +215,16 @@ class OrderService {
 
       final orders = <Order>[];
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          orders.add(Order.fromJson(Map<String, dynamic>.from(value)));
-        });
+        final raw = snapshot.value;
+        if (raw is Map) {
+          raw.forEach((key, value) {
+            final map = _toStringKeyedMap(value);
+            if (map == null) {
+              return;
+            }
+            orders.add(Order.fromJson(map));
+          });
+        }
       }
       return orders;
     } catch (e) {
@@ -121,13 +243,19 @@ class OrderService {
 
       final orders = <Order>[];
       if (snapshot.exists) {
-        final data = snapshot.value as Map<dynamic, dynamic>;
-        data.forEach((key, value) {
-          final order = Order.fromJson(Map<String, dynamic>.from(value));
-          if (order.timestamp.isAfter(startOfDay)) {
-            orders.add(order);
-          }
-        });
+        final raw = snapshot.value;
+        if (raw is Map) {
+          raw.forEach((key, value) {
+            final map = _toStringKeyedMap(value);
+            if (map == null) {
+              return;
+            }
+            final order = Order.fromJson(map);
+            if (order.timestamp.isAfter(startOfDay)) {
+              orders.add(order);
+            }
+          });
+        }
       }
       return orders;
     } catch (e) {

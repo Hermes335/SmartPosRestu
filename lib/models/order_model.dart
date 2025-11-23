@@ -8,6 +8,17 @@ enum OrderStatus {
 }
 
 /// Order item model
+Map<String, dynamic> _stringKeyedMap(Map<dynamic, dynamic> source) {
+  final result = <String, dynamic>{};
+  source.forEach((key, value) {
+    if (key == null) {
+      return;
+    }
+    result[key.toString()] = value;
+  });
+  return result;
+}
+
 class OrderItem {
   final String id;
   final String name;
@@ -32,12 +43,27 @@ class OrderItem {
     };
   }
 
-  factory OrderItem.fromJson(Map<String, dynamic> json) {
+  factory OrderItem.fromJson(Map<dynamic, dynamic> json) {
+    final map = json is Map<String, dynamic>
+        ? json
+        : _stringKeyedMap(json);
+
+    final id = map['id']?.toString() ?? '';
+    final name = map['name']?.toString() ?? '';
+    final quantityValue = map['quantity'];
+    final quantity = quantityValue is int
+        ? quantityValue
+        : int.tryParse(quantityValue?.toString() ?? '') ?? 0;
+    final priceValue = map['price'];
+    final price = priceValue is num
+        ? priceValue.toDouble()
+        : double.tryParse(priceValue?.toString() ?? '0') ?? 0;
+
     return OrderItem(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      quantity: json['quantity'] as int,
-      price: (json['price'] as num).toDouble(),
+      id: id,
+      name: name,
+      quantity: quantity,
+      price: price,
     );
   }
 }
@@ -50,6 +76,8 @@ class Order {
   final double totalAmount;
   final DateTime timestamp;
   OrderStatus status;
+  final String? notes;
+  final bool payNow;
 
   Order({
     required this.id,
@@ -58,6 +86,8 @@ class Order {
     required this.totalAmount,
     required this.timestamp,
     required this.status,
+    this.notes,
+    this.payNow = true,
   });
 
   Map<String, dynamic> toJson() {
@@ -68,22 +98,53 @@ class Order {
       'totalAmount': totalAmount,
       'timestamp': timestamp.toIso8601String(),
       'status': status.toString().split('.').last,
+      'notes': notes,
+      'payNow': payNow,
     };
   }
 
-  factory Order.fromJson(Map<String, dynamic> json) {
+  factory Order.fromJson(Map<dynamic, dynamic> json) {
+    final map = json is Map<String, dynamic>
+        ? json
+        : _stringKeyedMap(json);
+
+    final id = map['id']?.toString() ?? '';
+    final tableNumber = map['tableNumber']?.toString() ?? 'NO_TABLE';
+    final totalAmountValue = map['totalAmount'];
+    final totalAmount = totalAmountValue is num
+        ? totalAmountValue.toDouble()
+        : double.tryParse(totalAmountValue?.toString() ?? '0') ?? 0;
+
+    final timestampValue = map['timestamp']?.toString();
+    final timestamp = timestampValue != null
+        ? DateTime.tryParse(timestampValue) ?? DateTime.now()
+        : DateTime.now();
+
+    final statusValue = map['status']?.toString() ?? 'pending';
+    final status = OrderStatus.values.firstWhere(
+      (e) => e.toString().split('.').last == statusValue,
+      orElse: () => OrderStatus.pending,
+    );
+
+    final rawItems = map['items'];
+    final items = <OrderItem>[];
+    if (rawItems is List) {
+      for (final item in rawItems) {
+        if (item is Map) {
+          items.add(OrderItem.fromJson(Map<dynamic, dynamic>.from(item)));
+        }
+      }
+    }
+
     return Order(
-      id: json['id'] as String,
-      tableNumber: json['tableNumber'] as String,
-      items: (json['items'] as List)
-          .map((item) => OrderItem.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      totalAmount: (json['totalAmount'] as num).toDouble(),
-      timestamp: DateTime.parse(json['timestamp'] as String),
-      status: OrderStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == json['status'],
-        orElse: () => OrderStatus.pending,
-      ),
+      id: id,
+      tableNumber: tableNumber,
+      items: items,
+      totalAmount: totalAmount,
+      timestamp: timestamp,
+      status: status,
+      notes: map['notes']?.toString(),
+      payNow: (map['payNow'] as bool?) ?? true,
     );
   }
 }

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../models/order_model.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/order_card.dart';
+import '../services/order_service.dart';
 import 'new_order_screen.dart';
 
 /// Order Management screen - View and manage customer orders
@@ -15,12 +18,85 @@ class OrderManagementScreen extends StatefulWidget {
 
 class _OrderManagementScreenState extends State<OrderManagementScreen> {
   OrderStatus? _selectedFilter; // null means "All"
-  final List<Order> _mockOrders = [];
+  final OrderService _orderService = OrderService();
+  final List<Order> _orders = [];
+  StreamSubscription<List<Order>>? _ordersSubscription;
+  bool _isLoadingOrders = true;
+  String? _ordersError;
 
   @override
   void initState() {
     super.initState();
-    _generateMockOrders();
+    _subscribeToOrders();
+  }
+
+  @override
+  void dispose() {
+    _ordersSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToOrders() {
+    setState(() {
+      _isLoadingOrders = true;
+      _ordersError = null;
+    });
+
+    _ordersSubscription = _orderService.getOrdersStream().listen(
+      (orders) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _orders
+            ..clear()
+            ..addAll(orders);
+          _isLoadingOrders = false;
+        });
+      },
+      onError: (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isLoadingOrders = false;
+          _ordersError = error.toString();
+        });
+      },
+    );
+  }
+
+  Future<void> _changeOrderStatus(Order order, OrderStatus newStatus) async {
+    final previousStatus = order.status;
+    setState(() {
+      order.status = newStatus;
+    });
+
+    try {
+      await _orderService.updateOrderStatus(order.id, newStatus);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Order ${order.id} updated to ${newStatus.toString().split('.').last}'),
+          backgroundColor: AppConstants.successGreen,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        order.status = previousStatus;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update order status: $e'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+    }
   }
 
   @override
@@ -156,9 +232,55 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
 
   /// Orders list
   Widget _buildOrdersList() {
+    if (_isLoadingOrders) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: AppConstants.primaryOrange),
+            const SizedBox(height: AppConstants.paddingMedium),
+            const Text('Loading orders...', style: AppConstants.bodyMedium),
+          ],
+        ),
+      );
+    }
+
+    if (_ordersError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppConstants.paddingLarge),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: AppConstants.errorRed,
+              ),
+              const SizedBox(height: AppConstants.paddingMedium),
+              Text(
+                'Failed to load orders',
+                style: AppConstants.headingSmall.copyWith(
+                  color: AppConstants.errorRed,
+                ),
+              ),
+              const SizedBox(height: AppConstants.paddingSmall),
+              Text(
+                _ordersError!,
+                style: AppConstants.bodySmall.copyWith(
+                  color: AppConstants.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final filteredOrders = _selectedFilter == null
-        ? _mockOrders
-        : _mockOrders.where((order) => order.status == _selectedFilter).toList();
+        ? _orders
+        : _orders.where((order) => order.status == _selectedFilter).toList();
 
     if (filteredOrders.isEmpty) {
       return Center(
@@ -292,7 +414,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                     children: [
                       Text('Table:', style: AppConstants.bodyMedium),
                       Text(
-                        order.tableNumber,
+                        _formatTableLabel(order.tableNumber),
                         style: AppConstants.bodyLarge.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -478,6 +600,13 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
     }
   }
 
+  String _formatTableLabel(String tableNumber) {
+    if (tableNumber.trim().isEmpty || tableNumber == 'NO_TABLE') {
+      return 'No table';
+    }
+    return 'Table $tableNumber';
+  }
+
   /// Update order status
   void _updateOrderStatus(Order order) {
     showDialog(
@@ -497,16 +626,11 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
               groupValue: order.status,
               activeColor: AppConstants.primaryOrange,
               onChanged: (value) {
-                setState(() {
-                  order.status = value!;
-                });
+                if (value == null) {
+                  return;
+                }
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Order status updated to ${value.toString().split('.').last}'),
-                    backgroundColor: AppConstants.successGreen,
-                  ),
-                );
+                _changeOrderStatus(order, value);
               },
             );
           }).toList(),
@@ -564,7 +688,8 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text('Order #${order.id}', style: AppConstants.bodyLarge),
-                          Text('Table ${order.tableNumber}', style: AppConstants.bodyLarge),
+                          Text(_formatTableLabel(order.tableNumber),
+                              style: AppConstants.bodyLarge),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -843,10 +968,34 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
   }
 
   /// Process payment
-  void _processPayment(Order order, String paymentMethod, double amountPaid, double change) {
+  Future<void> _processPayment(
+    Order order,
+    String paymentMethod,
+    double amountPaid,
+    double change,
+  ) async {
+    final previousStatus = order.status;
     setState(() {
       order.status = OrderStatus.completed;
     });
+
+    try {
+      await _orderService.updateOrderStatus(order.id, OrderStatus.completed);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        order.status = previousStatus;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to complete payment: $e'),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+      return;
+    }
 
     showDialog(
       context: context,
@@ -872,7 +1021,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
               style: AppConstants.bodyLarge,
             ),
             Text(
-              'Table ${order.tableNumber}',
+              _formatTableLabel(order.tableNumber),
               style: AppConstants.bodyMedium.copyWith(
                 color: AppConstants.textSecondary,
               ),
@@ -969,75 +1118,23 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
   }
 
   /// Create new order
-  void _createNewOrder() {
-    Navigator.push(
+  Future<void> _createNewOrder() async {
+    final order = await Navigator.push<Order>(
       context,
       MaterialPageRoute(
         builder: (context) => const NewOrderScreen(),
       ),
     );
+
+    if (order != null && mounted) {
+      final tableLabel = _formatTableLabel(order.tableNumber);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Order ${order.id} created for $tableLabel'),
+          backgroundColor: AppConstants.successGreen,
+        ),
+      );
+    }
   }
 
-  /// Generate mock orders for demonstration
-  void _generateMockOrders() {
-    _mockOrders.addAll([
-      Order(
-        id: 'ORD001',
-        tableNumber: '5',
-        items: [
-          OrderItem(
-            id: 'ITEM1',
-            name: 'Margherita Pizza',
-            quantity: 2,
-            price: 15.0,
-          ),
-          OrderItem(
-            id: 'ITEM2',
-            name: 'Caesar Salad',
-            quantity: 1,
-            price: 12.0,
-          ),
-        ],
-        totalAmount: 42.0,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 15)),
-        status: OrderStatus.pending,
-      ),
-      Order(
-        id: 'ORD002',
-        tableNumber: '3',
-        items: [
-          OrderItem(
-            id: 'ITEM3',
-            name: 'Pasta Carbonara',
-            quantity: 1,
-            price: 17.0,
-          ),
-        ],
-        totalAmount: 17.0,
-        timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-        status: OrderStatus.preparing,
-      ),
-      Order(
-        id: 'ORD003',
-        tableNumber: '8',
-        items: [
-          OrderItem(
-            id: 'ITEM4',
-            name: 'Grilled Salmon',
-            quantity: 2,
-            price: 24.0,
-          ),
-          OrderItem(
-            id: 'ITEM5',
-            name: 'Tiramisu',
-            quantity: 2,
-            price: 9.0,
-          ),
-        ],
-        totalAmount: 66.0,
-        timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-        status: OrderStatus.ready,
-      ),
-    ]);
-  }
 }
