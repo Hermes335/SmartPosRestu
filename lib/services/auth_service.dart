@@ -45,6 +45,62 @@ class AuthService {
     }
   }
 
+  /// Fetch the currently authenticated user's profile from Realtime Database.
+  ///
+  /// Returns a map that merges Firebase Auth fields with database overrides
+  /// so UI can always display at least an email and display name.
+  Future<Map<String, dynamic>?> fetchUserProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return null;
+    }
+
+    try {
+      final snapshot = await _database.child('users/${user.uid}').get();
+      final Map<String, dynamic> profile = {};
+
+      if (snapshot.exists && snapshot.value is Map) {
+        profile.addAll(
+          Map<String, dynamic>.from(snapshot.value as Map<dynamic, dynamic>),
+        );
+      }
+
+      profile['uid'] = user.uid;
+      profile['email'] = profile['email'] ?? user.email ?? '';
+
+      final String computedDisplayName = (profile['displayName'] as String?)?.trim().isNotEmpty == true
+          ? (profile['displayName'] as String)
+          : (user.displayName?.trim().isNotEmpty == true
+              ? user.displayName!
+              : _fallbackNameFromEmail(profile['email'] as String?));
+      profile['displayName'] = computedDisplayName;
+
+      final usernameValue = (profile['username'] as String?)?.trim();
+      profile['username'] = usernameValue?.isNotEmpty == true
+          ? usernameValue
+          : computedDisplayName;
+
+      profile['role'] = (profile['role'] as String?)?.trim().isNotEmpty == true
+          ? profile['role']
+          : await getUserRole(user.uid) ?? 'staff';
+
+      profile['photoUrl'] = (profile['photoUrl'] as String?)?.isNotEmpty == true
+          ? profile['photoUrl']
+          : user.photoURL;
+
+      final createdAt = profile['createdAt'] ?? user.metadata.creationTime?.millisecondsSinceEpoch;
+      profile['createdAt'] = _resolveTimestamp(createdAt);
+
+      profile['phone'] ??= '';
+      profile['address'] ??= '';
+
+      return profile;
+    } catch (e) {
+      print('Error fetching user profile: $e');
+      return null;
+    }
+  }
+
   /// Sign in with email and password
   Future<Map<String, dynamic>> signInWithEmailPassword(
     String email,
@@ -122,7 +178,10 @@ class AuthService {
       await _database.child('users/${result.user!.uid}').set({
         'email': email.trim(),
         'displayName': displayName,
+        'username': displayName,
         'role': role,
+        'phone': '',
+        'address': '',
         'createdAt': ServerValue.timestamp,
         'isActive': true,
       });
@@ -198,7 +257,10 @@ class AuthService {
   /// Update user profile
   Future<Map<String, dynamic>> updateProfile({
     String? displayName,
+    String? username,
     String? photoUrl,
+    String? phone,
+    String? address,
   }) async {
     try {
       final user = _auth.currentUser;
@@ -209,15 +271,36 @@ class AuthService {
         };
       }
 
-      if (displayName != null) {
-        await user.updateDisplayName(displayName);
-        await _database.child('users/${user.uid}/displayName').set(displayName);
+      final Map<String, dynamic> updates = {};
+
+      if (displayName != null && displayName.trim().isNotEmpty) {
+        await user.updateDisplayName(displayName.trim());
+        updates['displayName'] = displayName.trim();
       }
 
-      if (photoUrl != null) {
-        await user.updatePhotoURL(photoUrl);
-        await _database.child('users/${user.uid}/photoUrl').set(photoUrl);
+      if (username != null && username.trim().isNotEmpty) {
+        updates['username'] = username.trim();
       }
+
+      if (photoUrl != null && photoUrl.trim().isNotEmpty) {
+        await user.updatePhotoURL(photoUrl.trim());
+        updates['photoUrl'] = photoUrl.trim();
+      }
+
+      if (phone != null) {
+        updates['phone'] = phone.trim();
+      }
+
+      if (address != null) {
+        updates['address'] = address.trim();
+      }
+
+      if (updates.isNotEmpty) {
+        updates['updatedAt'] = ServerValue.timestamp;
+        await _database.child('users/${user.uid}').update(updates);
+      }
+
+      await user.reload();
 
       return {
         'success': true,
@@ -227,6 +310,49 @@ class AuthService {
       return {
         'success': false,
         'error': 'Failed to update profile: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Change the current user's password by reauthenticating with the
+  /// provided [currentPassword]. Returns a map describing success or failure.
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        return {
+          'success': false,
+          'error': 'No authenticated user found.',
+        };
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+
+      await _database.child('users/${user.uid}/passwordUpdatedAt')
+          .set(ServerValue.timestamp);
+
+      return {
+        'success': true,
+        'message': 'Password updated successfully.',
+      };
+    } on FirebaseAuthException catch (e) {
+      return {
+        'success': false,
+        'error': _getAuthErrorMessage(e.code),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Failed to update password: ${e.toString()}',
       };
     }
   }
@@ -254,8 +380,46 @@ class AuthService {
         return 'Connection timeout. Check your internet or Firebase setup.';
       case 'invalid-credential':
         return 'Invalid email or password';
+      case 'requires-recent-login':
+        return 'Please log in again before changing this setting.';
       default:
         return 'Authentication failed: $code';
     }
+  }
+
+  static String _fallbackNameFromEmail(String? email) {
+    if (email == null || email.trim().isEmpty) {
+      return 'SmartServe User';
+    }
+    final parts = email.split('@');
+    if (parts.isEmpty || parts.first.trim().isEmpty) {
+      return 'SmartServe User';
+    }
+    final name = parts.first.replaceAll('.', ' ').trim();
+    if (name.isEmpty) {
+      return 'SmartServe User';
+    }
+    return name
+        .split(' ')
+        .map((word) =>
+            word.isEmpty ? word : '${word[0].toUpperCase()}${word.substring(1)}')
+        .join(' ');
+  }
+
+  static DateTime? _resolveTimestamp(dynamic value) {
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is int) {
+      // Firebase returns milliseconds since epoch
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is double) {
+      return DateTime.fromMillisecondsSinceEpoch(value.toInt());
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
   }
 }
