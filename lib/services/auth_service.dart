@@ -180,6 +180,8 @@ class AuthService {
         'displayName': displayName,
         'username': displayName,
         'role': role,
+        'phone': '',
+        'address': '',
         'createdAt': ServerValue.timestamp,
         'isActive': true,
       });
@@ -257,6 +259,8 @@ class AuthService {
     String? displayName,
     String? username,
     String? photoUrl,
+    String? phone,
+    String? address,
   }) async {
     try {
       final user = _auth.currentUser;
@@ -283,6 +287,14 @@ class AuthService {
         updates['photoUrl'] = photoUrl.trim();
       }
 
+      if (phone != null) {
+        updates['phone'] = phone.trim();
+      }
+
+      if (address != null) {
+        updates['address'] = address.trim();
+      }
+
       if (updates.isNotEmpty) {
         updates['updatedAt'] = ServerValue.timestamp;
         await _database.child('users/${user.uid}').update(updates);
@@ -298,6 +310,49 @@ class AuthService {
       return {
         'success': false,
         'error': 'Failed to update profile: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Change the current user's password by reauthenticating with the
+  /// provided [currentPassword]. Returns a map describing success or failure.
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null || user.email == null) {
+        return {
+          'success': false,
+          'error': 'No authenticated user found.',
+        };
+      }
+
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+
+      await _database.child('users/${user.uid}/passwordUpdatedAt')
+          .set(ServerValue.timestamp);
+
+      return {
+        'success': true,
+        'message': 'Password updated successfully.',
+      };
+    } on FirebaseAuthException catch (e) {
+      return {
+        'success': false,
+        'error': _getAuthErrorMessage(e.code),
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Failed to update password: ${e.toString()}',
       };
     }
   }
@@ -325,6 +380,8 @@ class AuthService {
         return 'Connection timeout. Check your internet or Firebase setup.';
       case 'invalid-credential':
         return 'Invalid email or password';
+      case 'requires-recent-login':
+        return 'Please log in again before changing this setting.';
       default:
         return 'Authentication failed: $code';
     }

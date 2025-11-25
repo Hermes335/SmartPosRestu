@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/transaction_service.dart';
 import '../utils/constants.dart';
 import 'login_screen.dart';
 import '../utils/formatters.dart';
@@ -16,16 +17,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _isLoading = true;
   bool _isSavingUsername = false;
+  bool _isSavingContact = false;
+  bool _isEditingContact = false;
   String? _errorMessage;
   late final TextEditingController _usernameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _addressController;
   late final FocusNode _usernameFocusNode;
+  late final FocusNode _phoneFocusNode;
+  late final FocusNode _addressFocusNode;
   final GlobalKey _usernameCardKey = GlobalKey();
+  final GlobalKey<FormState> _contactFormKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
     _usernameController = TextEditingController();
+    _phoneController = TextEditingController();
+    _addressController = TextEditingController();
     _usernameFocusNode = FocusNode();
+    _phoneFocusNode = FocusNode();
+    _addressFocusNode = FocusNode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadUserProfile();
@@ -36,7 +48,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   @override
   void dispose() {
     _usernameController.dispose();
+    _phoneController.dispose();
+    _addressController.dispose();
     _usernameFocusNode.dispose();
+    _phoneFocusNode.dispose();
+    _addressFocusNode.dispose();
     super.dispose();
   }
 
@@ -229,9 +245,48 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             ),
                             const SizedBox(height: AppConstants.paddingLarge),
 
-                            const Text(
-                              'Personal Information',
-                              style: AppConstants.headingSmall,
+                            Row(
+                              children: [
+                                const Text(
+                                  'Personal Information',
+                                  style: AppConstants.headingSmall,
+                                ),
+                                const Spacer(),
+                                TextButton.icon(
+                                  onPressed: _isSavingContact
+                                      ? null
+                                      : () {
+                                          if (_isEditingContact) {
+                                            FocusScope.of(context).unfocus();
+                                            setState(() {
+                                              _isEditingContact = false;
+                                              _phoneController.text =
+                                                  _profile?['phone']?.toString() ?? '';
+                                              _addressController.text =
+                                                  _profile?['address']?.toString() ?? '';
+                                            });
+                                          } else {
+                                            setState(() {
+                                              _isEditingContact = true;
+                                              _phoneController.text =
+                                                  _profile?['phone']?.toString() ?? '';
+                                              _addressController.text =
+                                                  _profile?['address']?.toString() ?? '';
+                                            });
+                                            Future.microtask(() {
+                                              if (mounted) {
+                                                _phoneFocusNode.requestFocus();
+                                              }
+                                            });
+                                          }
+                                        },
+                                  icon: Icon(
+                                    _isEditingContact ? Icons.close : Icons.edit,
+                                    size: 18,
+                                  ),
+                                  label: Text(_isEditingContact ? 'Cancel' : 'Edit'),
+                                ),
+                              ],
                             ),
                             const SizedBox(height: AppConstants.paddingMedium),
                             _buildInfoCard(
@@ -240,17 +295,68 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               value: _safeValue(_email, fallback: 'Not provided'),
                             ),
                             const SizedBox(height: AppConstants.paddingMedium),
-                            _buildInfoCard(
-                              icon: Icons.phone_outlined,
-                              label: 'Phone',
-                              value: _safeValue(_profile?['phone']),
-                            ),
-                            const SizedBox(height: AppConstants.paddingMedium),
-                            _buildInfoCard(
-                              icon: Icons.location_on_outlined,
-                              label: 'Address',
-                              value: _safeValue(_profile?['address']),
-                            ),
+                            if (!_isEditingContact) ...[
+                              _buildInfoCard(
+                                icon: Icons.phone_outlined,
+                                label: 'Phone',
+                                value: _safeValue(_profile?['phone']),
+                              ),
+                              const SizedBox(height: AppConstants.paddingMedium),
+                              _buildInfoCard(
+                                icon: Icons.location_on_outlined,
+                                label: 'Address',
+                                value: _safeValue(_profile?['address']),
+                              ),
+                            ] else ...[
+                              Form(
+                                key: _contactFormKey,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildEditableField(
+                                      icon: Icons.phone_outlined,
+                                      label: 'Phone',
+                                      controller: _phoneController,
+                                      focusNode: _phoneFocusNode,
+                                      keyboardType: TextInputType.phone,
+                                      validator: _validatePhone,
+                                      hintText: 'e.g. +63 912 345 6789',
+                                    ),
+                                    const SizedBox(height: AppConstants.paddingMedium),
+                                    _buildEditableField(
+                                      icon: Icons.location_on_outlined,
+                                      label: 'Address',
+                                      controller: _addressController,
+                                      focusNode: _addressFocusNode,
+                                      keyboardType: TextInputType.streetAddress,
+                                      maxLines: 3,
+                                      hintText: 'Street, City, Province',
+                                    ),
+                                    const SizedBox(height: AppConstants.paddingMedium),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: ElevatedButton.icon(
+                                        onPressed:
+                                            _isSavingContact ? null : _saveContactInfo,
+                                        icon: _isSavingContact
+                                            ? SizedBox(
+                                                height: 18,
+                                                width: 18,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white,
+                                                ),
+                                              )
+                                            : const Icon(Icons.save),
+                                        label: Text(
+                                          _isSavingContact ? 'Saving...' : 'Save Details',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: AppConstants.paddingLarge),
 
                             // Account Settings
@@ -262,9 +368,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             _buildSettingsTile(
                               icon: Icons.lock_outline,
                               title: 'Change Password',
-                              onTap: () {
-                                _showComingSoon('Change Password');
-                              },
+                              onTap: _showChangePasswordDialog,
                             ),
                             _buildSettingsTile(
                               icon: Icons.notifications_outlined,
@@ -296,49 +400,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               style: AppConstants.headingSmall,
                             ),
                             const SizedBox(height: AppConstants.paddingMedium),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'Orders Processed',
-                                    '1,234',
-                                    Icons.receipt_long,
-                                    AppConstants.successGreen,
-                                  ),
-                                ),
-                                const SizedBox(width: AppConstants.paddingMedium),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'Total Sales',
-                                    '₱2.5M',
-                                    Icons.trending_up,
-                                    AppConstants.primaryOrange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: AppConstants.paddingMedium),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'Hours Logged',
-                                    '520h',
-                                    Icons.access_time,
-                                    Colors.blue,
-                                  ),
-                                ),
-                                const SizedBox(width: AppConstants.paddingMedium),
-                                Expanded(
-                                  child: _buildStatCard(
-                                    'Performance',
-                                    '95%',
-                                    Icons.star,
-                                    AppConstants.warningYellow,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            _buildActivityStats(),
                             const SizedBox(height: AppConstants.paddingLarge),
 
                             // Logout Button
@@ -396,6 +458,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     profile['username'] = (profile['username'] as String?)?.trim() ?? '';
     profile['email'] = (profile['email'] as String?)?.trim() ?? '';
     profile['role'] = (profile['role'] as String?)?.trim() ?? '';
+    final phoneRaw = profile['phone'];
+    profile['phone'] = phoneRaw is String
+      ? phoneRaw.trim()
+      : (phoneRaw?.toString() ?? '');
+    final addressRaw = profile['address'];
+    profile['address'] = addressRaw is String
+      ? addressRaw.trim()
+      : (addressRaw?.toString() ?? '');
 
     setState(() {
       _profile = profile;
@@ -409,6 +479,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ? preferredUsername
         : fallbackName;
     _usernameController.value = TextEditingValue(text: controllerText);
+    _phoneController.value = TextEditingValue(text: profile['phone']?.toString() ?? '');
+    _addressController.value = TextEditingValue(text: profile['address']?.toString() ?? '');
   }
 
   Future<void> _saveUsername() async {
@@ -450,6 +522,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     setState(() => _isSavingUsername = false);
 
     if (result['success'] == true) {
+      FocusScope.of(context).unfocus();
       await _loadUserProfile(showLoader: false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -466,6 +539,220 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _saveContactInfo() async {
+    if (_contactFormKey.currentState?.validate() != true) {
+      return;
+    }
+
+    final phone = _phoneController.text.trim();
+    final address = _addressController.text.trim();
+
+    if ((_profile?['phone'] as String? ?? '').trim() == phone &&
+        (_profile?['address'] as String? ?? '').trim() == address) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No changes detected.'),
+          backgroundColor: AppConstants.primaryOrange,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSavingContact = true);
+
+    final authService = context.read<AuthService>();
+    final result = await authService.updateProfile(
+      phone: phone,
+      address: address,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() => _isSavingContact = false);
+
+    if (result['success'] == true) {
+      FocusScope.of(context).unfocus();
+      setState(() => _isEditingContact = false);
+      await _loadUserProfile(showLoader: false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message']?.toString() ?? 'Profile updated.'),
+          backgroundColor: AppConstants.successGreen,
+        ),
+      );
+    } else {
+      final error = result['error']?.toString() ?? 'Failed to update profile.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: AppConstants.errorRed,
+        ),
+      );
+    }
+  }
+
+  void _showChangePasswordDialog() {
+    final authService = context.read<AuthService>();
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context, rootNavigator: true);
+
+    final formKey = GlobalKey<FormState>();
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            Future<void> submit() async {
+              if (isSubmitting) {
+                return;
+              }
+              if (formKey.currentState?.validate() != true) {
+                return;
+              }
+
+              setStateDialog(() => isSubmitting = true);
+
+              final result = await authService.changePassword(
+                currentPassword: currentController.text,
+                newPassword: newController.text,
+              );
+
+              if (!mounted) {
+                return;
+              }
+
+              setStateDialog(() => isSubmitting = false);
+
+              if (result['success'] == true) {
+                if (navigator.canPop()) {
+                  navigator.pop();
+                }
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      result['message']?.toString() ?? 'Password updated.',
+                    ),
+                    backgroundColor: AppConstants.successGreen,
+                  ),
+                );
+              } else {
+                final error = result['error']?.toString() ??
+                    'Failed to update password.';
+                scaffoldMessenger.showSnackBar(
+                  SnackBar(
+                    content: Text(error),
+                    backgroundColor: AppConstants.errorRed,
+                  ),
+                );
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: AppConstants.cardBackground,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+              ),
+              title: const Text(
+                'Change Password',
+                style: AppConstants.headingSmall,
+              ),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: currentController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Current Password',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Enter your current password';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppConstants.paddingSmall),
+                    TextFormField(
+                      controller: newController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'New Password',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Enter a new password';
+                        }
+                        if (value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppConstants.paddingSmall),
+                    TextFormField(
+                      controller: confirmController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirm New Password',
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Confirm your new password';
+                        }
+                        if (value != newController.text) {
+                          return 'Passwords do not match';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: AppConstants.bodyMedium.copyWith(
+                      color: AppConstants.textSecondary,
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting ? null : submit,
+                  child: isSubmitting
+                      ? SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Update Password'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      currentController.dispose();
+      newController.dispose();
+      confirmController.dispose();
+    });
   }
 
   Widget _buildUsernameEditor() {
@@ -651,6 +938,211 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
     final text = value.toString().trim();
     return text.isEmpty ? fallback : text;
+  }
+
+  String? _validatePhone(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final digitsOnly = trimmed.replaceAll(RegExp(r'[^+\d]'), '');
+    if (digitsOnly.length < 7) {
+      return 'Enter a valid phone number';
+    }
+    return null;
+  }
+
+  Widget _buildEditableField({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    FocusNode? focusNode,
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+    String? hintText,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryOrange.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                ),
+                child: Icon(icon, color: AppConstants.primaryOrange, size: 20),
+              ),
+              const SizedBox(width: AppConstants.paddingSmall),
+              Text(
+                label,
+                style: AppConstants.bodySmall.copyWith(
+                  color: AppConstants.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          TextFormField(
+            controller: controller,
+            focusNode: focusNode,
+            keyboardType: keyboardType,
+            maxLines: maxLines,
+            style: AppConstants.bodyMedium,
+            validator: validator,
+            decoration: InputDecoration(
+              hintText: hintText,
+              filled: true,
+              fillColor: AppConstants.darkSecondary,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                borderSide: BorderSide(color: AppConstants.dividerColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                borderSide: BorderSide(color: AppConstants.dividerColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                borderSide: const BorderSide(color: AppConstants.primaryOrange),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityStats() {
+    final transactionService = context.read<TransactionService>();
+
+    return StreamBuilder<List<TransactionRecord>>(
+      stream: transactionService.watchTransactions(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppConstants.paddingMedium),
+            decoration: BoxDecoration(
+              color: AppConstants.cardBackground,
+              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+              border: Border.all(color: AppConstants.dividerColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: AppConstants.errorRed),
+                    const SizedBox(width: AppConstants.paddingSmall),
+                    Expanded(
+                      child: Text(
+                        'Unable to load activity stats',
+                        style: AppConstants.bodyMedium.copyWith(
+                          color: AppConstants.errorRed,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppConstants.paddingSmall),
+                Text(
+                  snapshot.error.toString(),
+                  style: AppConstants.bodySmall.copyWith(
+                    color: AppConstants.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final transactions = snapshot.data ?? const <TransactionRecord>[];
+        final bool isLoading = snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
+
+        final ordersProcessed = transactions.length;
+        final totalSales = transactions.fold<double>(
+          0,
+          (sum, record) => sum + record.saleAmount,
+        );
+
+        final joinDate = _joinDate;
+        final double hoursLogged = joinDate != null
+            ? DateTime.now().difference(joinDate).inMinutes / 60.0
+            : 0;
+
+        String formattedHours;
+        if (hoursLogged <= 0) {
+          formattedHours = '0 h';
+        } else if (hoursLogged < 1) {
+          formattedHours = '${(hoursLogged * 60).round()} min';
+        } else {
+          formattedHours = '${hoursLogged.toStringAsFixed(1)} h';
+        }
+
+        String formatCount(int count) {
+          return count.toString();
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final spacing = AppConstants.paddingMedium;
+            final isWide = constraints.maxWidth >= 520;
+            final double itemWidth = isWide
+                ? (constraints.maxWidth - spacing) / 2
+                : constraints.maxWidth;
+
+            final cards = <Widget>[
+              SizedBox(
+                width: itemWidth,
+                child: _buildStatCard(
+                  'Orders Processed',
+                  isLoading ? '—' : formatCount(ordersProcessed),
+                  Icons.receipt_long,
+                  AppConstants.successGreen,
+                ),
+              ),
+              SizedBox(
+                width: itemWidth,
+                child: _buildStatCard(
+                  'Total Sales',
+                  isLoading
+                      ? '—'
+                      : Formatters.formatCurrency(totalSales),
+                  Icons.trending_up,
+                  AppConstants.primaryOrange,
+                ),
+              ),
+              SizedBox(
+                width: itemWidth,
+                child: _buildStatCard(
+                  'Hours Logged',
+                  formattedHours,
+                  Icons.access_time,
+                  Colors.blue,
+                ),
+              ),
+            ];
+
+            return Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: cards,
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildInfoCard({
