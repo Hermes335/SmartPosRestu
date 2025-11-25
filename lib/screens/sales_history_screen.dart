@@ -516,6 +516,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                               ),
                             ),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(12),
@@ -540,7 +541,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      Row(
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
                                         children: [
                                           Text(
                                             expense['category'],
@@ -551,7 +556,6 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                           ),
-                                          const SizedBox(width: 8),
                                           Text(
                                             '• ${Formatters.formatDate(expense['date'])}',
                                             style: AppConstants.bodySmall
@@ -570,28 +574,42 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
                                     ],
                                   ),
                                 ),
-                                Text(
-                                  Formatters.formatCurrency(
-                                    _asDouble(expense['amount']),
-                                  ),
-                                  style: AppConstants.bodyLarge.copyWith(
-                                    color: AppConstants.errorRed,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 20,
-                                  ),
-                                  color: AppConstants.errorRed,
-                                  onPressed: () {
-                                    setState(() {
-                                      _allExpenses.remove(expense);
-                                    });
-                                    Navigator.pop(context);
-                                    _showExpensesDialog();
-                                  },
+                                const SizedBox(width: AppConstants.paddingSmall),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      Formatters.formatCurrency(
+                                        _asDouble(expense['amount']),
+                                      ),
+                                      style: AppConstants.bodyLarge.copyWith(
+                                        color: AppConstants.errorRed,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(
+                                        minWidth: 36,
+                                        minHeight: 36,
+                                      ),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 20,
+                                      ),
+                                      color: AppConstants.errorRed,
+                                      onPressed: () {
+                                        setState(() {
+                                          _allExpenses.remove(expense);
+                                        });
+                                        Navigator.pop(context);
+                                        _showExpensesDialog();
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -807,7 +825,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
   }
 
   Widget _buildProfitCards(
-    double grossProfit,
+    double totalSales,
     double totalExpenses,
     double netProfit,
     int expenseCount,
@@ -818,8 +836,8 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         children: [
           Expanded(
             child: _buildProfitCard(
-              'Gross Profit',
-              grossProfit,
+              'Sales',
+              totalSales,
               AppConstants.successGreen,
               Icons.trending_up,
             ),
@@ -1157,6 +1175,7 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
     int badgeValue = 0,
   }) {
     return Container(
+      constraints: const BoxConstraints(minHeight: 140),
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
       decoration: BoxDecoration(
         color: AppConstants.cardBackground,
@@ -1164,8 +1183,11 @@ class _SalesHistoryScreenState extends State<SalesHistoryScreen> {
         border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Stack(
+        alignment: Alignment.center,
         children: [
           Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(icon, color: color, size: 24),
               const SizedBox(height: 8),
