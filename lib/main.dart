@@ -14,7 +14,7 @@ import 'screens/user_profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/auth_service.dart';
-import 'services/transaction_service.dart'; // ADD THIS
+import 'services/transaction_service.dart';
 import 'utils/constants.dart';
 
 /// Main entry point of the SmartServe POS application

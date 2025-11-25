@@ -188,23 +188,50 @@ class TransactionService {
   /// Stream transactions ordered by latest timestamp first.
   Stream<List<TransactionRecord>> watchTransactions() {
     return _transactionsRef.onValue.map((event) {
-      final raw = event.snapshot.value;
-      final records = <TransactionRecord>[];
-
-      if (raw is Map) {
-        raw.forEach((key, value) {
-          final map = _stringKeyedMap(value);
-          if (map == null) {
-            return;
-          }
-          map['id'] ??= key.toString();
-          records.add(TransactionRecord.fromJson(map));
-        });
-      }
-
+      final records = _parseRecords(event.snapshot.value);
       records.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return records;
     });
+  }
+
+  /// Fetches all recorded transactions with a single read. Useful for
+  /// analytics workloads where aggregate transformations run client-side.
+  Future<List<TransactionRecord>> fetchTransactions() async {
+    final snapshot = await _transactionsRef.get();
+    if (!snapshot.exists) {
+      return <TransactionRecord>[];
+    }
+
+    final records = _parseRecords(snapshot.value);
+    records.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return records;
+  }
+
+  List<TransactionRecord> _parseRecords(dynamic raw) {
+    final records = <TransactionRecord>[];
+
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        final map = _stringKeyedMap(value);
+        if (map == null) {
+          return;
+        }
+        map['id'] ??= key.toString();
+        records.add(TransactionRecord.fromJson(map));
+      });
+    } else if (raw is List) {
+      for (var i = 0; i < raw.length; i++) {
+        final value = raw[i];
+        final map = _stringKeyedMap(value);
+        if (map == null) {
+          continue;
+        }
+        map['id'] ??= i.toString();
+        records.add(TransactionRecord.fromJson(map));
+      }
+    }
+
+    return records;
   }
 
   Map<String, dynamic>? _stringKeyedMap(dynamic source) {
