@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../models/analytics_calendar_model.dart';
 import '../models/sales_data_model.dart';
 import '../services/analytics_calendar_service.dart';
+import '../services/transaction_service.dart';
 import '../services/forecast_service.dart';
 import '../utils/constants.dart';
 import '../utils/formatters.dart';
@@ -19,12 +22,39 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen>
     with SingleTickerProviderStateMixin {
-  final ForecastService _forecastService = ForecastService();
-  final AnalyticsCalendarService _analyticsCalendarService =
+  static const List<String> _dayNames = <String>[
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+    final ForecastService _forecastService = ForecastService();
+    final AnalyticsCalendarService _analyticsCalendarService =
       AnalyticsCalendarService();
-  late TabController _tabController;
-  List<SalesForecast> _forecasts = [];
-  List<String> _insights = [];
+    late TabController _tabController;
+    List<SalesForecast> _forecasts = [];
+    List<ForecastSeriesPoint> _forecastProjectedSeries = [];
+    List<ForecastSeriesPoint> _forecastActualSeries = [];
+    List<CategoryDemandProjection> _forecastCategoryDemand = [];
+    List<ChannelDemandProjection> _forecastChannelDemand = [];
+    List<MenuItemPrediction> _forecastMenuPredictions = [];
+    List<_ForecastInsight> _forecastInsights = [];
+    _ForecastActionRecommendation? _forecastAction;
+    double _forecastTotalRevenue = 0;
+    int _forecastTotalOrders = 0;
+    double _forecastAverageOrderValue = 0;
+    double? _forecastRevenueChangePercent;
+    double? _forecastOrdersChangePercent;
+    double? _forecastAovChangePercent;
+    double _forecastAverageConfidence = 0;
+    double _forecastRecentAccuracy = 0;
+    double _forecastOverallAccuracy = 0;
+    double _forecastAccuracyTrend = 0;
+    double _forecastTrafficAccuracy = 0;
+    double _forecastPeakAccuracy = 0;
   bool _isLoading = true;
   WeatherCalendarMonth? _calendarMonth;
   List<EventImpact> _eventImpacts = [];
@@ -32,16 +62,39 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   bool _isImpactsLoading = true;
   String? _calendarError;
   String? _impactsError;
-  
+
   // Date range filters
   String _selectedForecastRange = '7 Days';
-  
+
   // Date range picker
   DateTime? _startDate;
   DateTime? _endDate;
-  
+
   // Calendar navigation
   DateTime _selectedCalendarMonth = DateTime.now();
+  final TransactionService _transactionService = TransactionService();
+  final NumberFormat _countFormatter = NumberFormat.decimalPattern();
+  List<TransactionRecord> _filteredTransactions = [];
+  double _totalRevenue = 0;
+  int _totalOrders = 0;
+  double _averageOrderValue = 0;
+  double? _revenueChangePercent;
+  double? _orderChangePercent;
+  double? _aovChangePercent;
+  double _peakHourRevenue = 0;
+  String _peakHourWindowLabel = '—';
+  List<_DailyRevenuePoint> _dailyRevenuePoints = [];
+  double _salesTrendMaxY = 0;
+  List<_CategoryBreakdown> _categoryBreakdown = [];
+  int _maxCategoryQuantity = 0;
+  List<_ChannelBreakdown> _channelBreakdown = [];
+  List<_TopSeller> _topSellers = [];
+  List<_PaymentBreakdown> _paymentBreakdown = [];
+  double _totalPaymentRevenue = 0;
+  List<int> _heatmapHours = [];
+  List<List<double>> _heatmapValues = [];
+  double _heatmapMaxValue = 0;
+  String _heatmapSummary = 'No transactions yet.';
 
   @override
   void initState() {
@@ -66,7 +119,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () {
-            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            final scaffoldState = context
+                .findAncestorStateOfType<ScaffoldState>();
             if (scaffoldState != null) {
               scaffoldState.openDrawer();
             }
@@ -74,15 +128,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         ),
         title: Row(
           children: [
-            Icon(
-              Icons.analytics,
-              color: AppConstants.primaryOrange,
-            ),
+            Icon(Icons.analytics, color: AppConstants.primaryOrange),
             const SizedBox(width: AppConstants.paddingSmall),
-            const Text(
-              'Analytics',
-              style: AppConstants.headingMedium,
-            ),
+            const Text('Analytics', style: AppConstants.headingMedium),
           ],
         ),
         actions: [
@@ -169,7 +217,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppConstants.darkSecondary,
                           foregroundColor: AppConstants.primaryOrange,
-                          side: const BorderSide(color: AppConstants.primaryOrange),
+                          side: const BorderSide(
+                            color: AppConstants.primaryOrange,
+                          ),
                         ),
                       ),
                     ),
@@ -182,7 +232,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppConstants.darkSecondary,
                           foregroundColor: AppConstants.primaryOrange,
-                          side: const BorderSide(color: AppConstants.primaryOrange),
+                          side: const BorderSide(
+                            color: AppConstants.primaryOrange,
+                          ),
                         ),
                       ),
                     ),
@@ -192,7 +244,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ),
           ),
           const SizedBox(height: AppConstants.paddingMedium),
-          
+
           // Key metrics cards
           _buildMetricsCards(),
           const SizedBox(height: AppConstants.paddingLarge),
@@ -220,10 +272,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // Top 10 Best Sellers
-          const Text(
-            'Top 10 Best Sellers',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Top 10 Best Sellers', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildTopSellingItems(),
           const SizedBox(height: AppConstants.paddingLarge),
@@ -238,10 +287,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // Peak Hours Heatmap
-          const Text(
-            'Peak Hours Analysis',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Peak Hours Analysis', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildPeakHoursHeatmap(),
         ],
@@ -262,10 +308,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             decoration: BoxDecoration(
               color: AppConstants.cardBackground,
               borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-              border: Border.all(
-                color: AppConstants.dividerColor,
-                width: 1,
-              ),
+              border: Border.all(color: AppConstants.dividerColor, width: 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -306,7 +349,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   child: Container(
                     decoration: BoxDecoration(
                       color: AppConstants.darkSecondary,
-                      borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.radiusSmall,
+                      ),
                       border: Border.all(color: AppConstants.dividerColor),
                     ),
                     child: Row(
@@ -329,10 +374,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // Forecast Summary Cards
-          const Text(
-            'Forecast Summary',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Forecast Summary', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildForecastSummaryCards(),
           const SizedBox(height: AppConstants.paddingLarge),
@@ -392,10 +434,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // AI Insights (inline below charts)
-          const Text(
-            'AI Insights',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('AI Insights', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildInlineInsights(),
         ],
@@ -406,6 +445,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   /// Insights tab with AI recommendations
   /// Metrics cards
   Widget _buildMetricsCards() {
+    final totalRevenueText = Formatters.formatCurrency(_totalRevenue);
+    final totalOrdersText = _countFormatter.format(_totalOrders);
+    final averageOrderValueText = Formatters.formatCurrency(_averageOrderValue);
+    final peakRevenueText = Formatters.formatCurrency(_peakHourRevenue);
+    final peakDetail = _peakHourWindowLabel == '—'
+        ? null
+        : 'Peak: $_peakHourWindowLabel';
+
     return Column(
       children: [
         Row(
@@ -413,20 +460,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             Expanded(
               child: StatCard(
                 title: 'Total Revenue',
-                value: '₱45,230',
+                value: totalRevenueText,
                 icon: Icons.trending_up,
                 color: AppConstants.successGreen,
-                percentageChange: '+12.5%',
+                percentageChange: _formatDelta(_revenueChangePercent),
               ),
             ),
             const SizedBox(width: AppConstants.paddingMedium),
             Expanded(
               child: StatCard(
                 title: 'Total Orders',
-                value: '725',
+                value: totalOrdersText,
                 icon: Icons.receipt,
                 color: AppConstants.primaryOrange,
-                percentageChange: '-3.1%',
+                percentageChange: _formatDelta(_orderChangePercent),
               ),
             ),
           ],
@@ -437,20 +484,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             Expanded(
               child: StatCard(
                 title: 'Avg. Order Value',
-                value: '₱62.40',
+                value: averageOrderValueText,
                 icon: Icons.shopping_cart,
                 color: Colors.blue,
-                percentageChange: '+5.2%',
+                percentageChange: _formatDelta(_aovChangePercent),
               ),
             ),
             const SizedBox(width: AppConstants.paddingMedium),
             Expanded(
               child: StatCard(
                 title: 'Peak Hour Revenue',
-                value: '₱18,500',
+                value: peakRevenueText,
                 icon: Icons.access_time,
                 color: AppConstants.warningYellow,
-                percentageChange: '12-2PM',
+                percentageChange: peakDetail,
               ),
             ),
           ],
@@ -470,32 +517,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         setState(() {
           _selectedForecastRange = range;
         });
-        final nowMonth = DateTime.now();
-        try {
-          await _reloadCalendarForMonth(
-            DateTime(nowMonth.year, nowMonth.month, 1),
-          );
-        } catch (e) {
-          if (!mounted) {
-            return;
-          }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to refresh calendar: $e'),
-              backgroundColor: AppConstants.errorRed,
-            ),
-          );
-        }
+        await _loadAnalyticsData();
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppConstants.primaryOrange
-              : Colors.transparent,
+          color: isSelected ? AppConstants.primaryOrange : Colors.transparent,
           borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
         ),
         child: Text(
@@ -583,25 +610,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       decoration: BoxDecoration(
         color: AppConstants.cardBackground,
         borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(
-          color: AppConstants.dividerColor,
-          width: 1,
-        ),
+        border: Border.all(color: AppConstants.dividerColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          const Text(
-            'Sales Trend',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Sales Trend', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           // Chart
-          SizedBox(
-            height: 250,
-            child: _buildSalesTrendChart(),
-          ),
+          SizedBox(height: 250, child: _buildSalesTrendChart()),
         ],
       ),
     );
@@ -609,19 +627,31 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Sales Trend Chart
   Widget _buildSalesTrendChart() {
-    // Sample data for chart - will be replaced with actual date range data
-    final spots = [
-      const FlSpot(0, 8500),
-      const FlSpot(1, 10200),
-      const FlSpot(2, 9800),
-      const FlSpot(3, 12500),
-      const FlSpot(4, 15200),
-      const FlSpot(5, 14800),
-      const FlSpot(6, 16500),
-    ];
-    final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const interval = 2000.0;
-    const maxY = 18000.0;
+    if (_dailyRevenuePoints.isEmpty) {
+      return Center(
+        child: Text(
+          'No completed transactions for the selected range yet.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final spots = <FlSpot>[];
+    final labels = <String>[];
+    final dateFormat = DateFormat('MMMd');
+    for (var i = 0; i < _dailyRevenuePoints.length; i++) {
+      final point = _dailyRevenuePoints[i];
+      spots.add(FlSpot(i.toDouble(), point.revenue));
+      labels.add(dateFormat.format(point.date));
+    }
+
+    final maxY = _salesTrendMaxY <= 0 ? 1000.0 : _salesTrendMaxY;
+    final yInterval = _computeYAxisInterval(maxY);
+    final bottomInterval = spots.length <= 1
+        ? 1
+        : math.max(1, (spots.length / 6).ceil());
 
     return LineChart(
       LineChartData(
@@ -630,15 +660,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         lineTouchData: LineTouchData(
           enabled: true,
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => AppConstants.darkSecondary.withOpacity(0.95),
+            getTooltipColor: (_) =>
+                AppConstants.darkSecondary.withOpacity(0.95),
             tooltipRoundedRadius: AppConstants.radiusSmall,
             tooltipPadding: const EdgeInsets.all(8),
-            tooltipBorder: BorderSide(color: AppConstants.primaryOrange, width: 1),
+            tooltipBorder: BorderSide(
+              color: AppConstants.primaryOrange,
+              width: 1,
+            ),
             getTooltipItems: (List<LineBarSpot> touchedSpots) {
               return touchedSpots.map((spot) {
-                final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                final index = spot.x.round();
+                final label = (index >= 0 && index < labels.length)
+                    ? labels[index]
+                    : 'Day ${index + 1}';
                 return LineTooltipItem(
-                  '${days[spot.x.toInt()]}\n',
+                  '$label\n',
                   AppConstants.bodySmall.copyWith(
                     color: AppConstants.textSecondary,
                     fontWeight: FontWeight.bold,
@@ -651,7 +688,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       ),
                     ),
                     TextSpan(
-                      text: '₱${(spot.y / 1000).toStringAsFixed(1)}K',
+                      text: Formatters.formatCurrency(spot.y),
                       style: AppConstants.bodySmall.copyWith(
                         color: AppConstants.textPrimary,
                         fontWeight: FontWeight.bold,
@@ -667,7 +704,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
-          horizontalInterval: interval,
+          horizontalInterval: yInterval,
           verticalInterval: 1,
           getDrawingHorizontalLine: (value) {
             return FlLine(
@@ -683,17 +720,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           },
         ),
         titlesData: FlTitlesData(
-          rightTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 50,
-              interval: interval,
+              interval: yInterval,
               getTitlesWidget: (value, meta) {
                 if (value == 0) {
                   return const SizedBox.shrink();
@@ -701,7 +734,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Text(
-                    '₱${(value / 1000).toStringAsFixed(0)}K',
+                    Formatters.formatCurrency(value),
                     style: AppConstants.bodySmall.copyWith(fontSize: 10),
                     textAlign: TextAlign.right,
                   ),
@@ -712,7 +745,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 1,
+              interval: bottomInterval.toDouble(),
               getTitlesWidget: (value, meta) {
                 if (value.toInt() < labels.length) {
                   return Text(
@@ -745,6 +778,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Forecast Summary Cards
   Widget _buildForecastSummaryCards() {
+    final revenueDelta = _formatDelta(_forecastRevenueChangePercent);
+    final ordersDelta = _formatDelta(_forecastOrdersChangePercent);
+    final aovDelta = _formatDelta(_forecastAovChangePercent);
+
+    final revenueColor = _deltaColor(_forecastRevenueChangePercent);
+    final ordersColor = _deltaColor(_forecastOrdersChangePercent);
+    final aovColor = _deltaColor(_forecastAovChangePercent);
+
+    final action = _forecastAction;
+    final visuals = _insightVisualForKind(action?.kind ?? _ForecastInsightKind.general);
+    final actionPriorityColor = _priorityColor(action?.priority ?? _ForecastInsightPriority.medium);
+
     return Column(
       children: [
         IntrinsicHeight(
@@ -753,20 +798,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               Expanded(
                 child: _buildSummaryCard(
                   'Predicted Revenue',
-                  '₱58,450',
-                  '+29.2% vs Historical',
+                  Formatters.formatCurrency(_forecastTotalRevenue),
+                  revenueDelta != null
+                      ? '$revenueDelta vs historical'
+                      : 'No baseline available',
                   Icons.trending_up,
-                  AppConstants.successGreen,
+                  revenueColor,
                 ),
               ),
               const SizedBox(width: AppConstants.paddingMedium),
               Expanded(
                 child: _buildSummaryCard(
                   'Predicted Orders',
-                  '890',
-                  '+22.8% vs Historical',
-                  Icons.receipt,
-                  AppConstants.primaryOrange,
+                  _countFormatter.format(_forecastTotalOrders),
+                  ordersDelta != null
+                      ? '$ordersDelta vs historical'
+                      : 'No baseline available',
+                  Icons.receipt_long,
+                  ordersColor,
                 ),
               ),
             ],
@@ -779,20 +828,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               Expanded(
                 child: _buildSummaryCard(
                   'Predicted Avg. Order',
-                  '₱65.67',
-                  '+5.2% vs Historical',
-                  Icons.shopping_cart,
-                  Colors.blue,
+                  Formatters.formatCurrency(_forecastAverageOrderValue),
+                  aovDelta != null
+                      ? '$aovDelta vs historical'
+                      : 'No baseline available',
+                  Icons.shopping_cart_checkout,
+                  aovColor,
                 ),
               ),
               const SizedBox(width: AppConstants.paddingMedium),
               Expanded(
                 child: _buildSummaryCard(
                   'Recommended Action',
-                  'Stock Up Pasta',
-                  'Top predicted item',
-                  Icons.inventory,
-                  AppConstants.warningYellow,
+                  action?.title ?? 'Stay proactive',
+                  action?.subtitle ??
+                      'Use the calendar + demand widgets to align staffing and promotions.',
+                  visuals.icon,
+                  actionPriorityColor,
                 ),
               ),
             ],
@@ -802,7 +854,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, String subtitle, IconData icon, Color color) {
+  Widget _buildSummaryCard(
+    String title,
+    String value,
+    String subtitle,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       height: double.infinity,
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -917,12 +975,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         );
       }
 
-      final hasRangeOverlap =
-          _monthOverlapsForecastRange(_selectedCalendarMonth);
-      final calendar = _calendarMonth ?? WeatherCalendarMonth(
-        month: _selectedCalendarMonth,
-        days: const [],
+      final hasRangeOverlap = _monthOverlapsForecastRange(
+        _selectedCalendarMonth,
       );
+      final calendar =
+          _calendarMonth ??
+          WeatherCalendarMonth(month: _selectedCalendarMonth, days: const []);
 
       if (calendar.isEmpty && hasRangeOverlap) {
         return SizedBox(
@@ -952,12 +1010,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       }
 
       return Column(
-        children: List.generate((daysInMonth + startingWeekday) ~/ 7 + 1, (weekIndex) {
+        children: List.generate((daysInMonth + startingWeekday) ~/ 7 + 1, (
+          weekIndex,
+        ) {
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: List.generate(7, (dayIndex) {
-                final dayNumber = weekIndex * 7 + dayIndex - startingWeekday + 1;
+                final dayNumber =
+                    weekIndex * 7 + dayIndex - startingWeekday + 1;
 
                 if (dayNumber < 1 || dayNumber > daysInMonth) {
                   return const Expanded(child: SizedBox(height: 70));
@@ -968,32 +1029,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   _selectedCalendarMonth.month,
                   dayNumber,
                 );
-                final isToday = currentDate.year == now.year &&
+                final isToday =
+                    currentDate.year == now.year &&
                     currentDate.month == now.month &&
                     currentDate.day == now.day;
-                final isInForecastRange =
-                  _isWithinSelectedForecastRange(currentDate);
+                final isInForecastRange = _isWithinSelectedForecastRange(
+                  currentDate,
+                );
                 final weatherDay = isInForecastRange
-                  ? calendar.dayForNumber(dayNumber)
-                  : null;
+                    ? calendar.dayForNumber(dayNumber)
+                    : null;
                 final hasEvent = weatherDay?.hasEvent ?? false;
                 final hasWeather = weatherDay != null;
 
                 final backgroundColor = isToday
                     ? AppConstants.primaryOrange.withOpacity(0.2)
                     : hasEvent
-                        ? AppConstants.primaryOrange.withOpacity(0.12)
-                        : isInForecastRange
-                            ? AppConstants.successGreen.withOpacity(0.08)
-                            : AppConstants.darkSecondary.withOpacity(0.5);
+                    ? AppConstants.primaryOrange.withOpacity(0.12)
+                    : isInForecastRange
+                    ? AppConstants.successGreen.withOpacity(0.08)
+                    : AppConstants.darkSecondary.withOpacity(0.5);
 
                 final borderColor = isToday
                     ? AppConstants.primaryOrange
                     : hasEvent
-                        ? AppConstants.primaryOrange
-                        : isInForecastRange
-                            ? AppConstants.successGreen.withOpacity(0.6)
-                            : AppConstants.dividerColor.withOpacity(0.3);
+                    ? AppConstants.primaryOrange
+                    : isInForecastRange
+                    ? AppConstants.successGreen.withOpacity(0.6)
+                    : AppConstants.dividerColor.withOpacity(0.3);
 
                 return Expanded(
                   child: Container(
@@ -1013,7 +1076,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         Text(
                           '$dayNumber',
                           style: AppConstants.bodyMedium.copyWith(
-                            fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isToday
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isToday
                                 ? AppConstants.primaryOrange
                                 : AppConstants.textPrimary,
@@ -1062,7 +1127,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: Icon(Icons.chevron_left, color: AppConstants.primaryOrange),
+                icon: Icon(
+                  Icons.chevron_left,
+                  color: AppConstants.primaryOrange,
+                ),
                 onPressed: () => _changeCalendarMonth(-1),
                 tooltip: 'Previous Month',
               ),
@@ -1073,7 +1141,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 ),
               ),
               IconButton(
-                icon: Icon(Icons.chevron_right, color: AppConstants.primaryOrange),
+                icon: Icon(
+                  Icons.chevron_right,
+                  color: AppConstants.primaryOrange,
+                ),
                 onPressed: () => _changeCalendarMonth(1),
                 tooltip: 'Next Month',
               ),
@@ -1132,7 +1203,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           ),
           const SizedBox(height: AppConstants.paddingMedium),
           Row(
-            children: ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day) {
+            children: ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((
+              day,
+            ) {
               return Expanded(
                 child: Center(
                   child: Text(
@@ -1156,8 +1229,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   /// Helper method to get month name
   String _getMonthName(int month) {
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return months[month - 1];
   }
@@ -1179,7 +1262,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             children: [
               CircularProgressIndicator(color: AppConstants.primaryOrange),
               const SizedBox(height: AppConstants.paddingSmall),
-              const Text('Loading event impacts...', style: AppConstants.bodySmall),
+              const Text(
+                'Loading event impacts...',
+                style: AppConstants.bodySmall,
+              ),
             ],
           ),
         ),
@@ -1269,10 +1355,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             decoration: BoxDecoration(
               color: AppConstants.darkSecondary,
               borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-              border: Border.all(
-                color: color.withOpacity(0.3),
-                width: 1,
-              ),
+              border: Border.all(color: color.withOpacity(0.3), width: 1),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1316,7 +1399,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: color.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(4),
@@ -1354,11 +1440,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.lightbulb_outline,
-                          size: 16,
-                          color: color,
-                        ),
+                        Icon(Icons.lightbulb_outline, size: 16, color: color),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -1381,55 +1463,79 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Demand Forecasting by Category
   Widget _buildCategoryDemandForecast() {
-    final categories = [
-      {
-        'name': 'Main Course',
-        'predicted': 340,
-        'historical': 280,
-        'change': '+21%',
-        'isIncrease': true,
-        'color': AppConstants.primaryOrange,
-        'icon': Icons.restaurant,
-      },
-      {
-        'name': 'Beverages',
-        'predicted': 210,
-        'historical': 178,
-        'change': '+18%',
-        'isIncrease': true,
-        'color': Colors.blue,
-        'icon': Icons.local_cafe,
-      },
-      {
-        'name': 'Appetizers',
-        'predicted': 120,
-        'historical': 105,
-        'change': '+14%',
-        'isIncrease': true,
-        'color': AppConstants.successGreen,
-        'icon': Icons.fastfood,
-      },
-      {
-        'name': 'Desserts',
-        'predicted': 85,
-        'historical': 78,
-        'change': '+9%',
-        'isIncrease': true,
-        'color': Colors.pink,
-        'icon': Icons.cake,
-      },
-      {
-        'name': 'Sides',
-        'predicted': 65,
-        'historical': 72,
-        'change': '-10%',
-        'isIncrease': false,
-        'color': AppConstants.warningYellow,
-        'icon': Icons.food_bank,
-      },
+    if (_forecastCategoryDemand.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'No category projections yet',
+              style: AppConstants.bodyLarge,
+            ),
+            const SizedBox(height: AppConstants.paddingSmall),
+            Text(
+              'Run analytics with recent transactions to forecast category demand.',
+              style: AppConstants.bodySmall.copyWith(
+                color: AppConstants.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    const List<Color> palette = <Color>[
+      AppConstants.primaryOrange,
+      Colors.blue,
+      AppConstants.successGreen,
+      Colors.pink,
+      AppConstants.warningYellow,
+      Colors.purple,
+      Colors.teal,
     ];
 
-    final maxValue = 340;
+    final maxPredicted = _forecastCategoryDemand.fold<int>(
+      0,
+      (maxValue, item) => math.max(maxValue, item.predictedOrders),
+    );
+    final maxValue = maxPredicted == 0 ? 1 : maxPredicted;
+
+    Color _categoryColor(int index) =>
+        palette[index % palette.length];
+
+    IconData _categoryIcon(String name) {
+      final lower = name.toLowerCase();
+      if (lower.contains('drink') || lower.contains('bev')) {
+        return Icons.local_cafe;
+      }
+      if (lower.contains('dessert') || lower.contains('sweet')) {
+        return Icons.cake;
+      }
+      if (lower.contains('app') || lower.contains('starter')) {
+        return Icons.fastfood;
+      }
+      if (lower.contains('side')) {
+        return Icons.food_bank;
+      }
+      return Icons.restaurant;
+    }
+
+    String _changeLabel(double value) {
+      final formatted = _formatDelta(value);
+      if (formatted == null) {
+        return '0%';
+      }
+      if (formatted == 'New') {
+        return 'New';
+      }
+      return formatted;
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -1440,10 +1546,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       ),
       child: Column(
         children: [
-          ...categories.map((category) {
-            final percentage = (category['predicted'] as int) / maxValue;
+          ..._forecastCategoryDemand.asMap().entries.map((entry) {
+            final index = entry.key;
+            final category = entry.value;
+            final color = _categoryColor(index);
+            final changeLabel = _changeLabel(category.changePercent);
+            final isIncrease =
+                !category.changePercent.isNaN && category.changePercent >= 0;
+            final percentage = category.predictedOrders / maxValue;
+
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
+              padding: const EdgeInsets.only(
+                bottom: AppConstants.paddingMedium,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1452,12 +1567,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: (category['color'] as Color).withOpacity(0.2),
+                          color: color.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Icon(
-                          category['icon'] as IconData,
-                          color: category['color'] as Color,
+                          _categoryIcon(category.name),
+                          color: color,
                           size: 20,
                         ),
                       ),
@@ -1467,14 +1582,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              category['name'] as String,
+                              category.name,
                               style: AppConstants.bodyMedium.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Historical: ${category['historical']} orders',
+                              'Historical: ${category.historicalOrders} orders',
                               style: AppConstants.bodySmall.copyWith(
                                 color: AppConstants.textSecondary,
                               ),
@@ -1486,19 +1601,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            '${category['predicted']} orders',
+                            '${category.predictedOrders} orders',
                             style: AppConstants.bodyLarge.copyWith(
                               fontWeight: FontWeight.bold,
-                              color: category['color'] as Color,
+                              color: color,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: (category['isIncrease'] as bool
-                                  ? AppConstants.successGreen
-                                  : AppConstants.errorRed)
+                              color: (isIncrease
+                                      ? AppConstants.successGreen
+                                      : AppConstants.errorRed)
                                   .withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
@@ -1506,19 +1624,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  category['isIncrease'] as bool
+                                  isIncrease
                                       ? Icons.arrow_upward
                                       : Icons.arrow_downward,
                                   size: 12,
-                                  color: category['isIncrease'] as bool
+                                  color: isIncrease
                                       ? AppConstants.successGreen
                                       : AppConstants.errorRed,
                                 ),
                                 const SizedBox(width: 2),
                                 Text(
-                                  category['change'] as String,
+                                  changeLabel,
                                   style: AppConstants.bodySmall.copyWith(
-                                    color: category['isIncrease'] as bool
+                                    color: isIncrease
                                         ? AppConstants.successGreen
                                         : AppConstants.errorRed,
                                     fontWeight: FontWeight.bold,
@@ -1533,23 +1651,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ),
                   const SizedBox(height: 8),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(6),
                     child: LinearProgressIndicator(
-                      value: percentage,
-                      minHeight: 8,
+                      value: percentage.clamp(0.0, 1.0),
+                      minHeight: 10,
+                      color: color,
                       backgroundColor: AppConstants.dividerColor,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        category['color'] as Color,
-                      ),
                     ),
                   ),
                 ],
               ),
             );
-          }).toList(),
+          }),
         ],
       ),
     );
+
   }
 
   /// Order Channel Forecast (Delivery vs Dine-In)
@@ -1604,7 +1721,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             children: channels.map((channel) {
               final isFirst = channel == channels.first;
               final isLast = channel == channels.last;
-              
+
               return Expanded(
                 flex: channel['percentage'] as int,
                 child: Container(
@@ -1613,9 +1730,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     color: channel['color'] as Color,
                     borderRadius: BorderRadius.only(
                       topLeft: isFirst ? const Radius.circular(8) : Radius.zero,
-                      bottomLeft: isFirst ? const Radius.circular(8) : Radius.zero,
+                      bottomLeft: isFirst
+                          ? const Radius.circular(8)
+                          : Radius.zero,
                       topRight: isLast ? const Radius.circular(8) : Radius.zero,
-                      bottomRight: isLast ? const Radius.circular(8) : Radius.zero,
+                      bottomRight: isLast
+                          ? const Radius.circular(8)
+                          : Radius.zero,
                     ),
                   ),
                   child: Center(
@@ -1632,7 +1753,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             }).toList(),
           ),
           const SizedBox(height: AppConstants.paddingLarge),
-          
+
           // Channel details
           ...channels.map((channel) {
             return Container(
@@ -1675,9 +1796,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                             ),
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppConstants.successGreen.withOpacity(0.2),
+                                color: AppConstants.successGreen.withOpacity(
+                                  0.2,
+                                ),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -1819,14 +1945,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 const SizedBox(height: AppConstants.paddingSmall),
                 ...(group['items'] as List).map((item) {
                   final itemMap = item as Map<String, dynamic>;
-                  final isNegative = (itemMap['trend'] as String).startsWith('-');
-                  
+                  final isNegative = (itemMap['trend'] as String).startsWith(
+                    '-',
+                  );
+
                   return Container(
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.all(AppConstants.paddingSmall),
                     decoration: BoxDecoration(
                       color: AppConstants.darkSecondary,
-                      borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                      borderRadius: BorderRadius.circular(
+                        AppConstants.radiusSmall,
+                      ),
                     ),
                     child: Row(
                       children: [
@@ -1850,7 +1980,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         ),
                         const SizedBox(width: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: (group['color'] as Color).withOpacity(0.2),
                             borderRadius: BorderRadius.circular(4),
@@ -1877,6 +2010,45 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Projected vs Actual Chart
   Widget _buildProjectedVsActualChart() {
+    if (_forecastProjectedSeries.isEmpty && _forecastActualSeries.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'Forecast chart will appear once analytics and projections are available.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final projected = List<ForecastSeriesPoint>.from(_forecastProjectedSeries);
+    final actual = List<ForecastSeriesPoint>.from(_forecastActualSeries);
+    final labelSeries = projected.isNotEmpty ? projected : actual;
+    final dateFormatter = DateFormat('MMMd');
+
+    final spotsProjected = projected
+        .asMap()
+        .entries
+        .map((entry) => FlSpot(entry.key.toDouble(), entry.value.revenue))
+        .toList();
+    final spotsActual = actual
+        .asMap()
+        .entries
+        .map((entry) => FlSpot(entry.key.toDouble(), entry.value.revenue))
+        .toList();
+
+    final maxRevenue = _niceCeiling([
+      ...projected.map((point) => point.revenue),
+      ...actual.map((point) => point.revenue),
+    ].fold<double>(0, math.max));
+    final yInterval = _computeYAxisInterval(maxRevenue);
+
     return Container(
       height: 250,
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -1937,22 +2109,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           Expanded(
             child: LineChart(
               LineChartData(
-                maxY: 18000,
+                maxY: maxRevenue <= 0 ? 100 : maxRevenue,
                 minY: 0,
                 // Interactive tooltips for forecast chart
                 lineTouchData: LineTouchData(
                   enabled: true,
                   touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (_) => AppConstants.darkSecondary.withOpacity(0.95),
+                    getTooltipColor: (_) =>
+                        AppConstants.darkSecondary.withOpacity(0.95),
                     tooltipRoundedRadius: AppConstants.radiusSmall,
                     tooltipPadding: const EdgeInsets.all(8),
-                    tooltipBorder: BorderSide(color: AppConstants.primaryOrange, width: 1),
+                    tooltipBorder: BorderSide(
+                      color: AppConstants.primaryOrange,
+                      width: 1,
+                    ),
                     getTooltipItems: (List<LineBarSpot> touchedSpots) {
                       return touchedSpots.map((spot) {
-                        final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
                         final isActual = spot.barIndex == 0;
+                        final series = isActual ? actual : projected;
+                        final index = spot.x.toInt().clamp(0, series.length - 1);
+                        final dateLabel = dateFormatter.format(series[index].date);
                         return LineTooltipItem(
-                          '${days[spot.x.toInt()]}\n',
+                          '$dateLabel\n',
                           AppConstants.bodySmall.copyWith(
                             color: AppConstants.textSecondary,
                             fontWeight: FontWeight.bold,
@@ -1961,11 +2139,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                             TextSpan(
                               text: '${isActual ? "Actual" : "Projected"}: ',
                               style: AppConstants.bodySmall.copyWith(
-                                color: isActual ? AppConstants.successGreen : AppConstants.primaryOrange,
+                                color: isActual
+                                    ? AppConstants.successGreen
+                                    : AppConstants.primaryOrange,
                               ),
                             ),
                             TextSpan(
-                              text: '₱${(spot.y / 1000).toStringAsFixed(1)}K',
+                              text: Formatters.formatCurrency(spot.y),
                               style: AppConstants.bodySmall.copyWith(
                                 color: AppConstants.textPrimary,
                                 fontWeight: FontWeight.bold,
@@ -1995,16 +2175,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   },
                 ),
                 titlesData: FlTitlesData(
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  topTitles: AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 50,
-                      interval: 2000,
+                      interval: yInterval,
                       getTitlesWidget: (value, meta) {
+                        final label = value <= 0
+                            ? '₱0'
+                            : '₱${Formatters.formatCompactNumber(value)}';
                         return Text(
-                          '₱${(value / 1000).toStringAsFixed(0)}K',
+                          label,
                           style: AppConstants.bodySmall.copyWith(fontSize: 10),
                         );
                       },
@@ -2015,10 +2202,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       showTitles: true,
                       interval: 1,
                       getTitlesWidget: (value, meta) {
-                        final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-                        if (value.toInt() < days.length) {
+                        final index = value.toInt();
+                        if (index >= 0 && index < labelSeries.length) {
                           return Text(
-                            days[value.toInt()],
+                            dateFormatter.format(labelSeries[index].date),
                             style: AppConstants.bodySmall.copyWith(fontSize: 10),
                           );
                         }
@@ -2031,15 +2218,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 lineBarsData: [
                   // Actual Sales - mirroring Historical Sales Trend
                   LineChartBarData(
-                    spots: [
-                      const FlSpot(0, 8500),
-                      const FlSpot(1, 10200),
-                      const FlSpot(2, 9800),
-                      const FlSpot(3, 12500),
-                      const FlSpot(4, 15200),
-                      const FlSpot(5, 14800),
-                      const FlSpot(6, 16500),
-                    ],
+                    spots: spotsActual,
                     isCurved: true,
                     color: AppConstants.successGreen,
                     barWidth: 3,
@@ -2048,15 +2227,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ),
                   // Projected Sales
                   LineChartBarData(
-                    spots: [
-                      const FlSpot(0, 8200),
-                      const FlSpot(1, 9900),
-                      const FlSpot(2, 10500),
-                      const FlSpot(3, 12200),
-                      const FlSpot(4, 15600),
-                      const FlSpot(5, 15200),
-                      const FlSpot(6, 17200),
-                    ],
+                    spots: spotsProjected,
                     isCurved: true,
                     color: AppConstants.primaryOrange,
                     barWidth: 3,
@@ -2078,6 +2249,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Forecast Accuracy Card
   Widget _buildForecastAccuracyCard() {
+    final overallPercent = (_forecastOverallAccuracy * 100).clamp(0, 100);
+    final overallBar = _forecastOverallAccuracy.clamp(0.0, 1.0).toDouble();
+    final trendText = _formatDelta(_forecastAccuracyTrend);
+    final trendColor = _deltaColor(_forecastAccuracyTrend);
+    final recentPercent = (_forecastRecentAccuracy * 100).clamp(0, 100);
+    final recentBar = _forecastRecentAccuracy.clamp(0.0, 1.0).toDouble();
+    final salesPercent = (_forecastOverallAccuracy * 100).clamp(0, 100);
+    final trafficPercent = (_forecastTrafficAccuracy * 100).clamp(0, 100);
+    final peakPercent = (_forecastPeakAccuracy * 100).clamp(0, 100);
+
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
       decoration: BoxDecoration(
@@ -2115,34 +2296,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     Row(
                       children: [
                         Text(
-                          '87.3%',
+                          '${overallPercent.toStringAsFixed(1)}%',
                           style: AppConstants.headingMedium.copyWith(
                             color: AppConstants.successGreen,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppConstants.successGreen.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '+2.1%',
-                            style: AppConstants.bodySmall.copyWith(
-                              color: AppConstants.successGreen,
-                              fontWeight: FontWeight.bold,
+                        if (trendText != null)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: trendColor.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              trendText,
+                              style: AppConstants.bodySmall.copyWith(
+                                color: trendColor,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: 0.873,
+                      value: overallBar,
                       backgroundColor: AppConstants.dividerColor,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppConstants.successGreen),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppConstants.successGreen,
+                      ),
                     ),
                   ],
                 ),
@@ -2153,14 +2340,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Last 7 Days',
+                      'Recent Fit',
                       style: AppConstants.bodySmall.copyWith(
                         color: AppConstants.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '92.1%',
+                      '${recentPercent.toStringAsFixed(1)}%',
                       style: AppConstants.headingMedium.copyWith(
                         color: AppConstants.successGreen,
                         fontWeight: FontWeight.bold,
@@ -2168,9 +2355,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     ),
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: 0.921,
+                      value: recentBar,
                       backgroundColor: AppConstants.dividerColor,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppConstants.successGreen),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppConstants.successGreen,
+                      ),
                     ),
                   ],
                 ),
@@ -2183,9 +2372,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildAccuracyMetric('Sales', '89%', AppConstants.primaryOrange),
-              _buildAccuracyMetric('Traffic', '91%', Colors.blue),
-              _buildAccuracyMetric('Peak Hours', '85%', AppConstants.warningYellow),
+              _buildAccuracyMetric(
+                'Sales',
+                '${salesPercent.toStringAsFixed(0)}%',
+                AppConstants.primaryOrange,
+              ),
+              _buildAccuracyMetric(
+                'Traffic',
+                '${trafficPercent.toStringAsFixed(0)}%',
+                Colors.blue,
+              ),
+              _buildAccuracyMetric(
+                'Peak Hours',
+                '${peakPercent.toStringAsFixed(0)}%',
+                AppConstants.warningYellow,
+              ),
             ],
           ),
         ],
@@ -2216,45 +2417,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Category Sales Distribution (Historical)
   Widget _buildCategorySalesDistribution() {
-    final categories = [
-      {
-        'name': 'Main Course',
-        'actual': 280,
-        'revenue': '₱17,500',
-        'color': AppConstants.primaryOrange,
-        'icon': Icons.restaurant,
-      },
-      {
-        'name': 'Beverages',
-        'actual': 178,
-        'revenue': '₱8,900',
-        'color': Colors.blue,
-        'icon': Icons.local_cafe,
-      },
-      {
-        'name': 'Appetizers',
-        'actual': 105,
-        'revenue': '₱5,250',
-        'color': AppConstants.successGreen,
-        'icon': Icons.fastfood,
-      },
-      {
-        'name': 'Desserts',
-        'actual': 78,
-        'revenue': '₱3,900',
-        'color': Colors.pink,
-        'icon': Icons.cake,
-      },
-      {
-        'name': 'Sides',
-        'actual': 72,
-        'revenue': '₱2,880',
-        'color': AppConstants.warningYellow,
-        'icon': Icons.food_bank,
-      },
+    final palette = [
+      AppConstants.primaryOrange,
+      Colors.blue,
+      AppConstants.successGreen,
+      Colors.pink,
+      AppConstants.warningYellow,
+      Colors.purple,
+      Colors.teal,
     ];
 
-    final maxValue = 280;
+    if (_categoryBreakdown.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'No category sales recorded for the selected range.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final maxValue = _maxCategoryQuantity.clamp(1, 1 << 30);
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -2265,10 +2455,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       ),
       child: Column(
         children: [
-          ...categories.map((category) {
-            final percentage = (category['actual'] as int) / maxValue;
+          ..._categoryBreakdown.asMap().entries.map((entry) {
+            final index = entry.key;
+            final category = entry.value;
+            final color = palette[index % palette.length];
+            final percentage = maxValue == 0
+                ? 0.0
+                : category.quantity / maxValue;
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
+              padding: const EdgeInsets.only(
+                bottom: AppConstants.paddingMedium,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2277,14 +2474,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: (category['color'] as Color).withOpacity(0.2),
+                          color: color.withOpacity(0.2),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(
-                          category['icon'] as IconData,
-                          color: category['color'] as Color,
-                          size: 20,
-                        ),
+                        child: Icon(Icons.restaurant, color: color, size: 20),
                       ),
                       const SizedBox(width: AppConstants.paddingSmall),
                       Expanded(
@@ -2292,14 +2485,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              category['name'] as String,
+                              category.name,
                               style: AppConstants.bodyMedium.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              category['revenue'] as String,
+                              Formatters.formatCurrency(category.revenue),
                               style: AppConstants.bodySmall.copyWith(
                                 color: AppConstants.textSecondary,
                               ),
@@ -2308,10 +2501,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         ),
                       ),
                       Text(
-                        '${category['actual']} orders',
+                        '${_countFormatter.format(category.quantity)} items',
                         style: AppConstants.bodyLarge.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: category['color'] as Color,
+                          color: color,
                         ),
                       ),
                     ],
@@ -2323,9 +2516,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       value: percentage,
                       minHeight: 8,
                       backgroundColor: AppConstants.dividerColor,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        category['color'] as Color,
-                      ),
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
                     ),
                   ),
                 ],
@@ -2339,34 +2530,30 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Order Channel Distribution (Historical)
   Widget _buildOrderChannelDistribution() {
-    final channels = [
-      {
-        'name': 'Dine-In',
-        'percentage': 65,
-        'orders': 470,
-        'revenue': '₱29,400',
-        'color': AppConstants.primaryOrange,
-        'icon': Icons.restaurant_menu,
-        'peak': 'Sat-Sun Lunch & Dinner',
-      },
-      {
-        'name': 'Takeout',
-        'percentage': 25,
-        'orders': 181,
-        'revenue': '₱11,300',
-        'color': Colors.blue,
-        'icon': Icons.shopping_bag,
-        'peak': 'Weekday Lunch',
-      },
-      {
-        'name': 'Delivery',
-        'percentage': 10,
-        'orders': 74,
-        'revenue': '₱4,530',
-        'color': AppConstants.successGreen,
-        'icon': Icons.delivery_dining,
-        'peak': 'Rainy Days, Late Night',
-      },
+    if (_channelBreakdown.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'No order channel data for the selected range.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final palette = [
+      AppConstants.primaryOrange,
+      Colors.blue,
+      AppConstants.successGreen,
+      Colors.purple,
+      Colors.teal,
+      AppConstants.warningYellow,
     ];
 
     return Container(
@@ -2380,26 +2567,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         children: [
           // Visual percentage bar
           Row(
-            children: channels.map((channel) {
-              final isFirst = channel == channels.first;
-              final isLast = channel == channels.last;
-              
+            children: _channelBreakdown.asMap().entries.map((entry) {
+              final index = entry.key;
+              final channel = entry.value;
+              final color = palette[index % palette.length];
+              final share = channel.share;
+              final flexValue = (share <= 0)
+                  ? 1
+                  : share.isFinite
+                  ? share * 100
+                  : 1;
+              final flex = flexValue.clamp(1, 100).round();
+              final isFirst = index == 0;
+              final isLast = index == _channelBreakdown.length - 1;
+
               return Expanded(
-                flex: channel['percentage'] as int,
+                flex: flex,
                 child: Container(
                   height: 40,
                   decoration: BoxDecoration(
-                    color: channel['color'] as Color,
+                    color: color,
                     borderRadius: BorderRadius.only(
                       topLeft: isFirst ? const Radius.circular(8) : Radius.zero,
-                      bottomLeft: isFirst ? const Radius.circular(8) : Radius.zero,
+                      bottomLeft: isFirst
+                          ? const Radius.circular(8)
+                          : Radius.zero,
                       topRight: isLast ? const Radius.circular(8) : Radius.zero,
-                      bottomRight: isLast ? const Radius.circular(8) : Radius.zero,
+                      bottomRight: isLast
+                          ? const Radius.circular(8)
+                          : Radius.zero,
                     ),
                   ),
                   child: Center(
                     child: Text(
-                      '${channel['percentage']}%',
+                      '${(share * 100).clamp(0, 100).toStringAsFixed(0)}%',
                       style: AppConstants.bodySmall.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -2411,33 +2612,35 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             }).toList(),
           ),
           const SizedBox(height: AppConstants.paddingLarge),
-          
+
           // Channel details
-          ...channels.map((channel) {
+          ..._channelBreakdown.asMap().entries.map((entry) {
+            final index = entry.key;
+            final channel = entry.value;
+            final color = palette[index % palette.length];
+            final icon = _channelIcon(channel.name);
+            final peakText = channel.peakLabel == null
+                ? 'Peak time unavailable'
+                : 'Peak: ${channel.peakLabel}';
+            final sharePercent = (channel.share * 100).clamp(0, 100);
+
             return Container(
               margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
               decoration: BoxDecoration(
                 color: AppConstants.darkSecondary,
                 borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-                border: Border.all(
-                  color: (channel['color'] as Color).withOpacity(0.3),
-                  width: 1,
-                ),
+                border: Border.all(color: color.withOpacity(0.3), width: 1),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: (channel['color'] as Color).withOpacity(0.2),
+                      color: color.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      channel['icon'] as IconData,
-                      color: channel['color'] as Color,
-                      size: 24,
-                    ),
+                    child: Icon(icon, color: color, size: 24),
                   ),
                   const SizedBox(width: AppConstants.paddingMedium),
                   Expanded(
@@ -2445,14 +2648,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          channel['name'] as String,
+                          channel.name,
                           style: AppConstants.bodyLarge.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${channel['orders']} orders • ${channel['revenue']}',
+                          '${_countFormatter.format(channel.orders)} orders • ${Formatters.formatCurrency(channel.revenue)}',
                           style: AppConstants.bodyMedium.copyWith(
                             color: AppConstants.textSecondary,
                           ),
@@ -2467,7 +2670,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              'Peak: ${channel['peak']}',
+                              peakText,
                               style: AppConstants.bodySmall.copyWith(
                                 color: AppConstants.textSecondary,
                                 fontStyle: FontStyle.italic,
@@ -2477,6 +2680,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         ),
                       ],
                     ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${sharePercent.toStringAsFixed(1)}%',
+                        style: AppConstants.bodyMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        Formatters.formatCurrency(channel.revenue),
+                        style: AppConstants.bodySmall.copyWith(
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -2489,20 +2711,26 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Top Selling Items
   Widget _buildTopSellingItems() {
-    final topItems = [
-      {'name': 'Pasta Carbonara', 'sold': 245, 'revenue': 12250.0},
-      {'name': 'Grilled Chicken', 'sold': 198, 'revenue': 11880.0},
-      {'name': 'Caesar Salad', 'sold': 176, 'revenue': 7040.0},
-      {'name': 'Margherita Pizza', 'sold': 165, 'revenue': 9900.0},
-      {'name': 'Fish & Chips', 'sold': 142, 'revenue': 8520.0},
-      {'name': 'Beef Steak', 'sold': 128, 'revenue': 10240.0},
-      {'name': 'Vegetable Soup', 'sold': 115, 'revenue': 3450.0},
-      {'name': 'Fried Rice', 'sold': 108, 'revenue': 3240.0},
-      {'name': 'Chocolate Cake', 'sold': 95, 'revenue': 3800.0},
-      {'name': 'Iced Coffee', 'sold': 87, 'revenue': 2610.0},
-    ];
+    if (_topSellers.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'No item performance data for the selected range.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
 
-    final maxSold = topItems[0]['sold'] as int;
+    final maxSold = _topSellers
+        .fold<int>(0, (max, item) => math.max(max, item.quantity))
+        .clamp(1, 1 << 30);
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -2518,10 +2746,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             children: [
               const Expanded(
                 flex: 3,
-                child: Text(
-                  'Item',
-                  style: AppConstants.bodySmall,
-                ),
+                child: Text('Item', style: AppConstants.bodySmall),
               ),
               const Expanded(
                 flex: 2,
@@ -2543,13 +2768,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           ),
           const Divider(color: AppConstants.dividerColor),
           // Items List
-          ...topItems.asMap().entries.map((entry) {
+          ..._topSellers.asMap().entries.map((entry) {
             final index = entry.key;
             final item = entry.value;
-            final name = item['name'] as String;
-            final sold = item['sold'] as int;
-            final revenue = item['revenue'] as double;
-            final percentage = (sold / maxSold);
+            final percentage = maxSold == 0 ? 0.0 : item.quantity / maxSold;
 
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2568,7 +2790,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                               : AppConstants.darkSecondary,
                           borderRadius: BorderRadius.circular(12),
                           border: index < 3
-                              ? Border.all(color: AppConstants.primaryOrange, width: 1)
+                              ? Border.all(
+                                  color: AppConstants.primaryOrange,
+                                  width: 1,
+                                )
                               : null,
                         ),
                         child: Center(
@@ -2588,9 +2813,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       Expanded(
                         flex: 3,
                         child: Text(
-                          name,
+                          item.name,
                           style: AppConstants.bodyMedium.copyWith(
-                            fontWeight: index < 3 ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: index < 3
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
                       ),
@@ -2598,7 +2825,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       Expanded(
                         flex: 2,
                         child: Text(
-                          '$sold',
+                          _countFormatter.format(item.quantity),
                           style: AppConstants.bodyMedium,
                           textAlign: TextAlign.center,
                         ),
@@ -2607,7 +2834,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       Expanded(
                         flex: 2,
                         child: Text(
-                          Formatters.formatCurrency(revenue),
+                          Formatters.formatCurrency(item.revenue),
                           style: AppConstants.bodyMedium.copyWith(
                             color: AppConstants.successGreen,
                             fontWeight: FontWeight.bold,
@@ -2623,7 +2850,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     value: percentage,
                     backgroundColor: AppConstants.dividerColor,
                     valueColor: AlwaysStoppedAnimation<Color>(
-                      index < 3 ? AppConstants.primaryOrange : AppConstants.successGreen,
+                      index < 3
+                          ? AppConstants.primaryOrange
+                          : AppConstants.successGreen,
                     ),
                   ),
                 ],
@@ -2637,14 +2866,31 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Payment Method Distribution
   Widget _buildPaymentMethodDistribution() {
-    final paymentData = [
-      {'method': 'Cash', 'amount': 20353.5, 'count': 425, 'color': AppConstants.successGreen},
-      {'method': 'Card', 'amount': 15830.75, 'count': 215, 'color': Colors.blue},
-      {'method': 'GCash', 'amount': 6784.25, 'count': 65, 'color': AppConstants.primaryOrange},
-      {'method': 'Maya', 'amount': 2261.5, 'count': 20, 'color': AppConstants.warningYellow},
-    ];
+    if (_paymentBreakdown.isEmpty || _totalPaymentRevenue <= 0) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'No payment method data for the selected range.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
 
-    final total = paymentData.fold(0.0, (sum, item) => sum + (item['amount'] as double));
+    final palette = [
+      AppConstants.successGreen,
+      Colors.blue,
+      AppConstants.primaryOrange,
+      AppConstants.warningYellow,
+      Colors.purple,
+      Colors.teal,
+    ];
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -2657,27 +2903,35 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         children: [
           // Pie chart representation using stacked bars
           Row(
-            children: paymentData.map((data) {
-              final amount = data['amount'] as double;
-              final percentage = (amount / total);
-              final isFirst = data == paymentData.first;
-              final isLast = data == paymentData.last;
-              
+            children: _paymentBreakdown.asMap().entries.map((entry) {
+              final index = entry.key;
+              final data = entry.value;
+              final color = palette[index % palette.length];
+              final percentage = _totalPaymentRevenue == 0
+                  ? 0.0
+                  : (data.amount / _totalPaymentRevenue);
+              final isFirst = index == 0;
+              final isLast = index == _paymentBreakdown.length - 1;
+
               return Expanded(
                 flex: (percentage * 100).toInt(),
                 child: Container(
                   height: 40,
                   decoration: BoxDecoration(
-                    color: data['color'] as Color,
+                    color: color,
                     borderRadius: isFirst
-                        ? const BorderRadius.horizontal(left: Radius.circular(8))
+                        ? const BorderRadius.horizontal(
+                            left: Radius.circular(8),
+                          )
                         : isLast
-                            ? const BorderRadius.horizontal(right: Radius.circular(8))
-                            : null,
+                        ? const BorderRadius.horizontal(
+                            right: Radius.circular(8),
+                          )
+                        : null,
                   ),
                   child: Center(
                     child: Text(
-                      '${(percentage * 100).toStringAsFixed(0)}%',
+                      '${(percentage * 100).clamp(0, 100).toStringAsFixed(0)}%',
                       style: AppConstants.bodySmall.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -2690,30 +2944,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           ),
           const SizedBox(height: AppConstants.paddingLarge),
           // Payment details
-          ...paymentData.map((data) {
-            final amount = data['amount'] as double;
-            final percentage = (amount / total * 100);
+          ..._paymentBreakdown.asMap().entries.map((entry) {
+            final index = entry.key;
+            final data = entry.value;
+            final color = palette[index % palette.length];
+            final amount = data.amount;
+            final percentage = _totalPaymentRevenue == 0
+                ? 0.0
+                : (amount / _totalPaymentRevenue) * 100;
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
+              padding: const EdgeInsets.only(
+                bottom: AppConstants.paddingMedium,
+              ),
               child: Row(
                 children: [
                   Container(
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: data['color'] as Color,
+                      color: color,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      data['method'] as String,
-                      style: AppConstants.bodyMedium,
-                    ),
+                    child: Text(data.method, style: AppConstants.bodyMedium),
                   ),
                   Text(
-                    '${data['count']} orders',
+                    '${_countFormatter.format(data.count)} orders',
                     style: AppConstants.bodySmall.copyWith(
                       color: AppConstants.textSecondary,
                     ),
@@ -2727,15 +2985,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: (data['color'] as Color).withOpacity(0.2),
+                      color: color.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       '${percentage.toStringAsFixed(1)}%',
                       style: AppConstants.bodySmall.copyWith(
-                        color: data['color'] as Color,
+                        color: color,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -2751,28 +3012,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Peak Hours Heatmap
   Widget _buildPeakHoursHeatmap() {
-    // Sample data: revenue by hour (0-23) for each day (0-6)
-    final heatmapData = [
-      [0.5, 1.2, 0.8, 1.5, 2.1, 3.2, 2.8], // 6 AM
-      [1.2, 2.1, 1.8, 2.5, 3.2, 4.5, 3.8], // 7 AM
-      [2.5, 3.8, 3.2, 4.1, 5.2, 6.8, 5.5], // 8 AM
-      [3.8, 5.2, 4.5, 5.8, 6.9, 8.2, 7.1], // 9 AM
-      [4.5, 6.1, 5.8, 6.5, 7.8, 9.5, 8.2], // 10 AM
-      [5.2, 7.8, 6.9, 8.2, 9.5, 11.2, 10.1], // 11 AM
-      [8.5, 12.5, 11.2, 13.5, 15.8, 18.2, 16.5], // 12 PM - Peak lunch
-      [9.2, 13.8, 12.5, 14.2, 16.5, 19.5, 17.8], // 1 PM - Peak lunch
-      [6.5, 9.2, 8.5, 10.1, 11.5, 13.8, 12.2], // 2 PM
-      [4.2, 6.5, 5.8, 7.2, 8.5, 10.1, 9.2], // 3 PM
-      [3.5, 5.2, 4.8, 6.1, 7.2, 8.8, 7.5], // 4 PM
-      [4.8, 7.2, 6.5, 8.5, 10.2, 12.5, 11.2], // 5 PM
-      [7.5, 11.2, 10.5, 13.2, 15.5, 18.8, 17.2], // 6 PM - Peak dinner
-      [8.8, 13.5, 12.8, 15.8, 18.2, 21.5, 19.8], // 7 PM - Peak dinner
-      [7.2, 10.8, 10.2, 12.5, 14.8, 17.5, 16.2], // 8 PM
-      [5.5, 8.2, 7.8, 9.5, 11.2, 13.8, 12.5], // 9 PM
-    ];
+    if (_heatmapHours.isEmpty || _heatmapValues.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: Text(
+          'No hourly sales activity recorded for the selected range.',
+          style: AppConstants.bodySmall.copyWith(
+            color: AppConstants.textSecondary,
+          ),
+        ),
+      );
+    }
 
     final days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final maxValue = 21.5;
+    final maxValue = _heatmapMaxValue <= 0 ? 1 : _heatmapMaxValue;
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -2820,24 +3078,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           Row(
             children: [
               const SizedBox(width: 50), // Space for hour labels
-              ...days.map((day) => Expanded(
-                child: Center(
-                  child: Text(
-                    day,
-                    style: AppConstants.bodySmall.copyWith(
-                      fontWeight: FontWeight.bold,
+              ...days
+                  .map(
+                    (day) => Expanded(
+                      child: Center(
+                        child: Text(
+                          day,
+                          style: AppConstants.bodySmall.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              )).toList(),
+                  )
+                  .toList(),
             ],
           ),
           const SizedBox(height: 8),
           // Heatmap grid
-          ...List.generate(heatmapData.length, (hourIndex) {
-            final hour = hourIndex + 6; // Starting from 6 AM
-            final hourLabel = hour <= 12 ? '${hour}AM' : '${hour - 12}PM';
-            
+          ...List.generate(_heatmapHours.length, (hourIndex) {
+            final hour = _heatmapHours[hourIndex];
+            final hourLabel = _formatHourLabel(hour);
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
@@ -2852,12 +3114,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     ),
                   ),
                   ...List.generate(7, (dayIndex) {
-                    final value = heatmapData[hourIndex][dayIndex];
-                    final intensity = value / maxValue;
-                    
+                    final value = _heatmapValues[hourIndex][dayIndex];
+                    final intensity = maxValue == 0 ? 0.0 : value / maxValue;
+
                     return Expanded(
                       child: Tooltip(
-                        message: '${days[dayIndex]} $hourLabel\n₱${value.toStringAsFixed(1)}K',
+                        message:
+                            '${days[dayIndex]} ${_formatHourRange(hour)}\n${Formatters.formatCurrency(value)}',
                         child: Container(
                           height: 24,
                           margin: const EdgeInsets.only(right: 4),
@@ -2880,7 +3143,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             decoration: BoxDecoration(
               color: AppConstants.primaryOrange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-              border: Border.all(color: AppConstants.primaryOrange.withOpacity(0.3)),
+              border: Border.all(
+                color: AppConstants.primaryOrange.withOpacity(0.3),
+              ),
             ),
             child: Row(
               children: [
@@ -2892,7 +3157,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Peak hours: 12-2PM (Lunch) & 6-8PM (Dinner). Saturday & Sunday show highest traffic.',
+                    _heatmapSummary,
                     style: AppConstants.bodySmall.copyWith(
                       color: AppConstants.textPrimary,
                     ),
@@ -2916,63 +3181,60 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Inline AI Insights
   Widget _buildInlineInsights() {
-    final insights = [
-      {
-        'text': 'Schedule +2 servers for Saturday lunch (12-2PM). Expected 35% traffic increase.',
-        'action': 'View Schedule',
-        'icon': Icons.people,
-        'color': AppConstants.primaryOrange,
-        'priority': 'High',
-      },
-      {
-        'text': 'Order 30kg pasta by Thursday. Forecast shows 145 orders this weekend.',
-        'action': 'Update Inventory',
-        'icon': Icons.inventory_2,
-        'color': AppConstants.warningYellow,
-        'priority': 'High',
-      },
-      {
-        'text': 'Rain expected Friday. Promote comfort food combos - historically 22% sales boost.',
-        'action': 'Create Promo',
-        'icon': Icons.campaign,
-        'color': Colors.blue,
-        'priority': 'Medium',
-      },
-      {
-        'text': 'Dessert demand up 18% but stock low. Add Leche Flan to specials board.',
-        'action': 'Add to Menu',
-        'icon': Icons.cake,
-        'color': AppConstants.successGreen,
-        'priority': 'Medium',
-      },
-      {
-        'text': 'Monday typically slow. Run 20% lunch special to boost 11AM-1PM traffic.',
-        'action': 'Set Discount',
-        'icon': Icons.local_offer,
-        'color': Colors.purple,
-        'priority': 'Low',
-      },
-    ];
+    if (_forecastInsights.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppConstants.primaryOrange.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.insights_outlined,
+                color: AppConstants.primaryOrange,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: AppConstants.paddingMedium),
+            Expanded(
+              child: Text(
+                'Run a forecast to surface staffing, inventory, and promo recommendations tailored to this range.',
+                style: AppConstants.bodyMedium.copyWith(
+                  color: AppConstants.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
-      children: insights.map((insight) {
-        final priority = insight['priority'] as String;
-        Color priorityColor = AppConstants.textSecondary;
-        if (priority == 'High') priorityColor = AppConstants.errorRed;
-        if (priority == 'Medium') priorityColor = AppConstants.warningYellow;
-        
+      children: _forecastInsights.map((insight) {
+        final visual = _insightVisualForKind(insight.kind);
+        final priorityColor = _priorityColor(insight.priority);
+        final priorityLabel = _priorityLabel(insight.priority);
+        final borderColor = insight.priority == _ForecastInsightPriority.high
+            ? AppConstants.primaryOrange.withOpacity(0.5)
+            : AppConstants.dividerColor;
+
         return Container(
           margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
           padding: const EdgeInsets.all(AppConstants.paddingMedium),
           decoration: BoxDecoration(
             color: AppConstants.cardBackground,
             borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-            border: Border.all(
-              color: priority == 'High' 
-                  ? AppConstants.primaryOrange.withOpacity(0.5)
-                  : AppConstants.dividerColor,
-              width: priority == 'High' ? 2 : 1,
-            ),
+            border: Border.all(color: borderColor, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2983,12 +3245,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: (insight['color'] as Color).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                      color: visual.accentColor.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
-                      insight['icon'] as IconData,
-                      color: insight['color'] as Color,
+                      visual.icon,
+                      color: visual.accentColor,
                       size: 20,
                     ),
                   ),
@@ -2997,61 +3259,65 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: priorityColor.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                priority,
-                                style: AppConstants.bodySmall.copyWith(
-                                  color: priorityColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
                         Text(
-                          insight['text'] as String,
-                          style: AppConstants.bodyMedium,
+                          insight.text,
+                          style: AppConstants.bodyMedium.copyWith(
+                            color: AppConstants.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: AppConstants.paddingSmall),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: priorityColor.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Priority: $priorityLabel',
+                            style: AppConstants.bodySmall.copyWith(
+                              color: priorityColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: AppConstants.paddingSmall),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('${insight['action']} feature coming soon!'),
-                        backgroundColor: AppConstants.primaryOrange,
-                      ),
-                    );
-                  },
-                  icon: Icon(
-                    Icons.arrow_forward,
-                    size: 16,
-                    color: AppConstants.primaryOrange,
-                  ),
-                  label: Text(
-                    insight['action'] as String,
-                    style: AppConstants.bodySmall.copyWith(
+              if (insight.actionLabel != null) ...[
+                const SizedBox(height: AppConstants.paddingSmall),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            '${insight.actionLabel} workflow coming soon!',
+                          ),
+                          backgroundColor: AppConstants.primaryOrange,
+                        ),
+                      );
+                    },
+                    icon: Icon(
+                      Icons.arrow_forward,
+                      size: 16,
                       color: AppConstants.primaryOrange,
-                      fontWeight: FontWeight.bold,
+                    ),
+                    label: Text(
+                      insight.actionLabel!,
+                      style: AppConstants.bodySmall.copyWith(
+                        color: AppConstants.primaryOrange,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         );
@@ -3151,10 +3417,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // Insights & Recommendations
-          const Text(
-            'Key Insights',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Key Insights', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildComparisonInsights(),
         ],
@@ -3225,7 +3488,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 ],
               ),
               const SizedBox(height: AppConstants.paddingMedium),
-              
+
               // Values row
               Row(
                 children: [
@@ -3235,7 +3498,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       padding: const EdgeInsets.all(AppConstants.paddingMedium),
                       decoration: BoxDecoration(
                         color: AppConstants.darkSecondary.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.radiusSmall,
+                        ),
                         border: Border.all(
                           color: AppConstants.textSecondary.withOpacity(0.3),
                           width: 1,
@@ -3261,7 +3526,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       ),
                     ),
                   ),
-                  
+
                   // Arrow and difference
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -3274,11 +3539,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         ),
                         const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: (metric['isIncrease'] as bool
-                                ? AppConstants.successGreen
-                                : Colors.red).withOpacity(0.2),
+                            color:
+                                (metric['isIncrease'] as bool
+                                        ? AppConstants.successGreen
+                                        : Colors.red)
+                                    .withOpacity(0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Row(
@@ -3309,14 +3579,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       ],
                     ),
                   ),
-                  
+
                   // Forecast
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.all(AppConstants.paddingMedium),
                       decoration: BoxDecoration(
                         color: AppConstants.primaryOrange.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+                        borderRadius: BorderRadius.circular(
+                          AppConstants.radiusSmall,
+                        ),
                         border: Border.all(
                           color: AppConstants.primaryOrange.withOpacity(0.3),
                           width: 1,
@@ -3362,7 +3634,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       const FlSpot(5, 14800),
       const FlSpot(6, 16500),
     ];
-    
+
     final forecastSpots = [
       const FlSpot(0, 8200),
       const FlSpot(1, 9900),
@@ -3372,7 +3644,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       const FlSpot(5, 15200),
       const FlSpot(6, 17200),
     ];
-    
+
     final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return Container(
@@ -3472,7 +3744,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
                             '₱${(value / 1000).toStringAsFixed(0)}K',
-                            style: AppConstants.bodySmall.copyWith(fontSize: 10),
+                            style: AppConstants.bodySmall.copyWith(
+                              fontSize: 10,
+                            ),
                             textAlign: TextAlign.right,
                           ),
                         );
@@ -3487,7 +3761,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         if (value.toInt() < labels.length) {
                           return Text(
                             labels[value.toInt()],
-                            style: AppConstants.bodySmall.copyWith(fontSize: 10),
+                            style: AppConstants.bodySmall.copyWith(
+                              fontSize: 10,
+                            ),
                           );
                         }
                         return const Text('');
@@ -3584,7 +3860,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           final forecast = category['forecast'] as int;
           final change = ((forecast - historical) / historical * 100);
           final isIncrease = change > 0;
-          
+
           return Padding(
             padding: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
             child: Column(
@@ -3614,26 +3890,37 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: (isIncrease
-                            ? AppConstants.successGreen
-                            : Colors.red).withOpacity(0.2),
+                        color:
+                            (isIncrease
+                                    ? AppConstants.successGreen
+                                    : Colors.red)
+                                .withOpacity(0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isIncrease ? Icons.arrow_upward : Icons.arrow_downward,
-                            color: isIncrease ? AppConstants.successGreen : Colors.red,
+                            isIncrease
+                                ? Icons.arrow_upward
+                                : Icons.arrow_downward,
+                            color: isIncrease
+                                ? AppConstants.successGreen
+                                : Colors.red,
                             size: 12,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             '${change.abs().toStringAsFixed(0)}%',
                             style: AppConstants.bodySmall.copyWith(
-                              color: isIncrease ? AppConstants.successGreen : Colors.red,
+                              color: isIncrease
+                                  ? AppConstants.successGreen
+                                  : Colors.red,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -3762,7 +4049,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 children: channels.map((channel) {
                   final isFirst = channel == channels.first;
                   final isLast = channel == channels.last;
-                  
+
                   return Expanded(
                     flex: channel['historicalPct'] as int,
                     child: Container(
@@ -3770,10 +4057,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       decoration: BoxDecoration(
                         color: (channel['color'] as Color).withOpacity(0.5),
                         borderRadius: BorderRadius.only(
-                          topLeft: isFirst ? const Radius.circular(6) : Radius.zero,
-                          bottomLeft: isFirst ? const Radius.circular(6) : Radius.zero,
-                          topRight: isLast ? const Radius.circular(6) : Radius.zero,
-                          bottomRight: isLast ? const Radius.circular(6) : Radius.zero,
+                          topLeft: isFirst
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          bottomLeft: isFirst
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          topRight: isLast
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          bottomRight: isLast
+                              ? const Radius.circular(6)
+                              : Radius.zero,
                         ),
                       ),
                       child: Center(
@@ -3793,7 +4088,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ],
           ),
           const SizedBox(height: AppConstants.paddingMedium),
-          
+
           // Forecast bar
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3809,7 +4104,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 children: channels.map((channel) {
                   final isFirst = channel == channels.first;
                   final isLast = channel == channels.last;
-                  
+
                   return Expanded(
                     flex: channel['forecastPct'] as int,
                     child: Container(
@@ -3817,10 +4112,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                       decoration: BoxDecoration(
                         color: channel['color'] as Color,
                         borderRadius: BorderRadius.only(
-                          topLeft: isFirst ? const Radius.circular(6) : Radius.zero,
-                          bottomLeft: isFirst ? const Radius.circular(6) : Radius.zero,
-                          topRight: isLast ? const Radius.circular(6) : Radius.zero,
-                          bottomRight: isLast ? const Radius.circular(6) : Radius.zero,
+                          topLeft: isFirst
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          bottomLeft: isFirst
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          topRight: isLast
+                              ? const Radius.circular(6)
+                              : Radius.zero,
+                          bottomRight: isLast
+                              ? const Radius.circular(6)
+                              : Radius.zero,
                         ),
                       ),
                       child: Center(
@@ -3840,13 +4143,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             ],
           ),
           const SizedBox(height: AppConstants.paddingLarge),
-          
+
           // Channel details
           ...channels.map((channel) {
             final historical = channel['historical'] as int;
             final forecast = channel['forecast'] as int;
             final change = ((forecast - historical) / historical * 100);
-            
+
             return Container(
               margin: const EdgeInsets.only(bottom: AppConstants.paddingSmall),
               padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -3909,25 +4212,29 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         'icon': Icons.trending_up,
         'color': AppConstants.successGreen,
         'title': 'Strong Growth Projection',
-        'description': 'Revenue forecast shows a 29.2% increase, driven by upcoming events and weather patterns.',
+        'description':
+            'Revenue forecast shows a 29.2% increase, driven by upcoming events and weather patterns.',
       },
       {
         'icon': Icons.restaurant,
         'color': AppConstants.primaryOrange,
         'title': 'Main Course Surge',
-        'description': 'Main Course category expected to grow by 21%, suggesting increased demand for full meals.',
+        'description':
+            'Main Course category expected to grow by 21%, suggesting increased demand for full meals.',
       },
       {
         'icon': Icons.delivery_dining,
         'color': Colors.blue,
         'title': 'Channel Consistency',
-        'description': 'Order channel distribution remains stable at 65-25-10, with growth across all channels.',
+        'description':
+            'Order channel distribution remains stable at 65-25-10, with growth across all channels.',
       },
       {
         'icon': Icons.lightbulb_outline,
         'color': AppConstants.warningYellow,
         'title': 'Recommended Actions',
-        'description': 'Stock up on Pasta ingredients. Add 2 servers for peak hours. Promote comfort food during rainy days.',
+        'description':
+            'Stock up on Pasta ingredients. Add 2 servers for peak hours. Promote comfort food during rainy days.',
       },
     ];
 
@@ -3989,8 +4296,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Date range text
   String get _dateRangeText {
-    if (_startDate == null) return 'Showing: ${Formatters.formatDate(DateTime.now())}';
-    if (_endDate == null) return 'Showing: ${Formatters.formatDate(_startDate!)}';
+    if (_startDate == null)
+      return 'Showing: ${Formatters.formatDate(DateTime.now())}';
+    if (_endDate == null)
+      return 'Showing: ${Formatters.formatDate(_startDate!)}';
     return 'Showing: ${Formatters.formatDate(_startDate!)} - ${Formatters.formatDate(_endDate!)}';
   }
 
@@ -4072,12 +4381,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
     try {
       final now = DateTime.now();
-      final forecastRange = Duration(days: _selectedRangeInDays());
-      final forecastsFuture = _forecastService.getSalesForecast(
-        startDate: now,
-        endDate: now.add(forecastRange),
-      );
-      final insightsFuture = _forecastService.getSalesInsights();
+      final rangeDays = _selectedRangeInDays();
+      final transactionsFuture = _transactionService.fetchTransactions();
 
       final monthStart = DateTime(
         _selectedCalendarMonth.year,
@@ -4092,24 +4397,110 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
       final calendarFuture = _analyticsCalendarService.fetchMonth(
         _selectedCalendarMonth,
-        fallbackRangeDays: _selectedRangeInDays(),
+        fallbackRangeDays: rangeDays,
       );
       final impactsFuture = _analyticsCalendarService.fetchImpacts(
         start: monthStart,
         end: monthEnd,
-        fallbackRangeDays: _selectedRangeInDays(),
+        fallbackRangeDays: rangeDays,
       );
 
-      final forecasts = await forecastsFuture;
-      final insights = await insightsFuture;
+      final transactions = await transactionsFuture;
       final calendar = await calendarFuture;
       final impacts = await impactsFuture;
+      final analyticsSnapshot = _calculateHistoricalAnalytics(transactions);
+      final resolvedRange = _resolveActiveDateRange();
+
+      final categorySnapshots = analyticsSnapshot.categoryBreakdown
+          .map(
+            (category) => HistoricalCategorySnapshot(
+              name: category.name,
+              orders: category.quantity,
+              revenue: category.revenue,
+            ),
+          )
+          .toList();
+      final channelSnapshots = analyticsSnapshot.channelBreakdown
+          .map(
+            (channel) => HistoricalChannelSnapshot(
+              name: channel.name,
+              orders: channel.orders,
+              revenue: channel.revenue,
+              share: channel.share,
+              peakLabel: channel.peakLabel,
+            ),
+          )
+          .toList();
+      final topSellerSnapshots = analyticsSnapshot.topSellers
+          .map(
+            (seller) => HistoricalTopSellerSnapshot(
+              name: seller.name,
+              orders: seller.quantity,
+              revenue: seller.revenue,
+            ),
+          )
+          .toList();
+
+      final forecastRangeStart = resolvedRange.previousStart;
+      final forecastRangeEnd = resolvedRange.end;
+      final transactionsForForecast = transactions.where((record) {
+        final day = _dateOnly(record.timestamp);
+        return !day.isBefore(forecastRangeStart) &&
+            !day.isAfter(forecastRangeEnd);
+      }).toList();
+      final forecastInputTransactions =
+          transactionsForForecast.isNotEmpty ? transactionsForForecast : transactions;
+
+      final forecastResult = _forecastService.computeForecast(
+        startDate: now,
+        rangeDays: rangeDays,
+        transactions: forecastInputTransactions,
+        eventImpacts: impacts,
+        historicalRangeStart: resolvedRange.start,
+        historicalRangeEnd: resolvedRange.end,
+        historicalRevenue: analyticsSnapshot.totalRevenue,
+        historicalOrders: analyticsSnapshot.totalOrders,
+        historicalAverageOrderValue: analyticsSnapshot.averageOrderValue,
+        categories: categorySnapshots,
+        channels: channelSnapshots,
+        topSellers: topSellerSnapshots,
+      );
+
+      final insightResult = _generateForecastInsights(
+        forecastResult: forecastResult,
+        impacts: impacts,
+        categorySnapshots: categorySnapshots,
+        topSellerSnapshots: topSellerSnapshots,
+      );
+
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _forecasts = forecasts;
-        _insights = insights;
+        _forecasts = forecastResult.forecasts;
+        _forecastProjectedSeries = forecastResult.projectedSeries;
+        _forecastActualSeries = forecastResult.actualSeries;
+        _forecastCategoryDemand = forecastResult.categoryDemand;
+        _forecastChannelDemand = forecastResult.channelDemand;
+        _forecastMenuPredictions = forecastResult.menuPredictions;
+        _forecastTotalRevenue = forecastResult.totalPredictedRevenue;
+        _forecastTotalOrders = forecastResult.totalPredictedOrders;
+        _forecastAverageOrderValue = forecastResult.averageOrderValue;
+        _forecastRevenueChangePercent = forecastResult.revenueChangePercent;
+        _forecastOrdersChangePercent = forecastResult.orderChangePercent;
+        _forecastAovChangePercent = forecastResult.aovChangePercent;
+        _forecastAverageConfidence = forecastResult.averageConfidence;
+        _forecastRecentAccuracy = forecastResult.recentAccuracy;
+        _forecastOverallAccuracy = forecastResult.salesAccuracy;
+        _forecastAccuracyTrend = forecastResult.accuracyTrend;
+        _forecastTrafficAccuracy = forecastResult.trafficAccuracy;
+        _forecastPeakAccuracy = forecastResult.peakAccuracy;
+        _forecastAction = insightResult.action;
+        _forecastInsights = insightResult.insights;
         _calendarMonth = calendar;
         _eventImpacts = impacts;
+        _applyAnalyticsSnapshot(analyticsSnapshot);
         _isLoading = false;
         _isCalendarLoading = false;
         _isImpactsLoading = false;
@@ -4145,6 +4536,167 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
   }
 
+  _ForecastInsightResult _generateForecastInsights({
+    required ForecastResult forecastResult,
+    required List<EventImpact> impacts,
+    required List<HistoricalCategorySnapshot> categorySnapshots,
+    required List<HistoricalTopSellerSnapshot> topSellerSnapshots,
+  }) {
+    final insights = <_ForecastInsight>[];
+    _ForecastActionRecommendation? action;
+
+    if (forecastResult.projectedSeries.isNotEmpty) {
+      final strongestDay = forecastResult.projectedSeries.reduce(
+        (a, b) => a.revenue >= b.revenue ? a : b,
+      );
+      final revenueLabel = Formatters.formatCurrency(strongestDay.revenue);
+      final dateLabel = DateFormat('EEE, MMM d').format(strongestDay.date);
+      insights.add(
+        _ForecastInsight(
+          text:
+              'Peak demand expected on $dateLabel with projected revenue of $revenueLabel. Staff 2 extra team members for lunch and dinner.',
+          priority: _ForecastInsightPriority.high,
+          kind: _ForecastInsightKind.staffing,
+          actionLabel: 'Adjust Staffing',
+        ),
+      );
+      action ??= _ForecastActionRecommendation(
+        title: 'Boost staffing on $dateLabel',
+        subtitle: 'Forecast peak ~ $revenueLabel. Add coverage for 11AM-2PM & 6-9PM.',
+        kind: _ForecastInsightKind.staffing,
+        priority: _ForecastInsightPriority.high,
+      );
+    }
+
+    final upcomingImpacts = impacts
+      .where((impact) => _isWithinSelectedForecastRange(impact.date))
+        .where((impact) => (impact.impactPercent ?? 0).abs() >= 6)
+        .toList()
+      ..sort(
+        (a, b) => (b.impactPercent ?? 0).abs().compareTo(
+          (a.impactPercent ?? 0).abs(),
+        ),
+      );
+
+    if (upcomingImpacts.isNotEmpty) {
+      final leadImpact = upcomingImpacts.first;
+      final dateLabel = DateFormat('EEE, MMM d').format(leadImpact.date);
+      final percentLabel = _formatDelta(leadImpact.impactPercent) ?? '0%';
+      final isPositive = (leadImpact.impactPercent ?? 0) >= 0;
+      final insightText = isPositive
+          ? 'Expect a $percentLabel lift on $dateLabel due to ${leadImpact.eventName}. Promote bundles and prep popular items early.'
+          : '$percentLabel headwind on $dateLabel from ${leadImpact.eventName}. Prepare delivery promos and keep comfort food ready.';
+      insights.add(
+        _ForecastInsight(
+          text: insightText,
+          priority:
+              isPositive ? _ForecastInsightPriority.high : _ForecastInsightPriority.high,
+          kind: isPositive
+              ? _ForecastInsightKind.inventory
+              : _ForecastInsightKind.promo,
+          actionLabel: isPositive ? 'Plan Specials' : 'Launch Promo',
+        ),
+      );
+      action ??= _ForecastActionRecommendation(
+        title: isPositive
+            ? 'Prep for ${leadImpact.eventName}'
+            : 'Mitigate ${leadImpact.eventName}',
+        subtitle: isPositive
+            ? 'Stock signature dishes before $dateLabel; forecast boost $percentLabel.'
+            : 'Schedule rainy-day offer for $dateLabel to offset $percentLabel dip.',
+        kind:
+            isPositive ? _ForecastInsightKind.inventory : _ForecastInsightKind.promo,
+        priority: _ForecastInsightPriority.high,
+      );
+    }
+
+    final categoryGrowth = forecastResult.categoryDemand
+        .where((category) => !category.changePercent.isNaN)
+        .toList()
+      ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+
+    if (categoryGrowth.isNotEmpty) {
+      final leader = categoryGrowth.first;
+      final changeLabel = _formatDelta(leader.changePercent) ?? '+0%';
+      insights.add(
+        _ForecastInsight(
+          text:
+              '${leader.name} demand projected at ${leader.predictedOrders} orders ($changeLabel). Ensure prep and line capacity by midday.',
+          priority: _ForecastInsightPriority.medium,
+          kind: _ForecastInsightKind.inventory,
+          actionLabel: 'Update Prep List',
+        ),
+      );
+      if (leader.changePercent > 0) {
+        action ??= _ForecastActionRecommendation(
+          title: 'Stock up ${leader.name}',
+          subtitle:
+              'Forecast ${leader.predictedOrders} orders ($changeLabel). Order ingredients ahead of weekend.',
+          kind: _ForecastInsightKind.inventory,
+          priority: _ForecastInsightPriority.medium,
+        );
+      }
+    }
+
+    final menuTrends = forecastResult.menuPredictions
+        .where((item) => item.status == MenuPredictionStatus.rising)
+        .toList()
+      ..sort((a, b) => b.changePercent.compareTo(a.changePercent));
+    if (menuTrends.isNotEmpty) {
+      final rising = menuTrends.first;
+      final changeLabel = _formatDelta(rising.changePercent) ?? '+0%';
+      insights.add(
+        _ForecastInsight(
+          text:
+              '${rising.name} projected at ${rising.predictedOrders} orders ($changeLabel). Feature it on the specials board.',
+          priority: _ForecastInsightPriority.medium,
+          kind: _ForecastInsightKind.promo,
+          actionLabel: 'Promote Item',
+        ),
+      );
+    } else if (forecastResult.menuPredictions.isNotEmpty) {
+      final declining = forecastResult.menuPredictions
+          .where((item) => item.status == MenuPredictionStatus.declining)
+          .toList();
+      if (declining.isNotEmpty) {
+        final item = declining.first;
+        final changeLabel = _formatDelta(item.changePercent) ?? '0%';
+        insights.add(
+          _ForecastInsight(
+            text:
+                '${item.name} may soften to ${item.predictedOrders} orders ($changeLabel). Consider a combo to lift interest.',
+            priority: _ForecastInsightPriority.low,
+            kind: _ForecastInsightKind.promo,
+            actionLabel: 'Create Combo',
+          ),
+        );
+      }
+    }
+
+    if (insights.isEmpty) {
+      insights.add(
+        const _ForecastInsight(
+          text: 'Forecast ready. Use the calendar and demand widgets to tailor staffing and promos.',
+          priority: _ForecastInsightPriority.low,
+          kind: _ForecastInsightKind.general,
+        ),
+      );
+    }
+
+    action ??= _ForecastActionRecommendation(
+      title: 'Refresh weekend prep list',
+      subtitle:
+          'Forecast totals exceed historical average. Align staffing, mise en place, and promos to capture demand.',
+      kind: _ForecastInsightKind.general,
+      priority: _ForecastInsightPriority.medium,
+    );
+
+    return _ForecastInsightResult(
+      action: action!,
+      insights: List<_ForecastInsight>.unmodifiable(insights),
+    );
+  }
+
   bool _isWithinSelectedForecastRange(DateTime date) {
     final today = DateTime.now();
     final start = DateTime(today.year, today.month, today.day);
@@ -4155,9 +4707,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   bool _monthOverlapsForecastRange(DateTime month) {
     final first = DateTime(month.year, month.month, 1);
     final last = DateTime(month.year, month.month + 1, 0);
-    for (var current = first;
-        !current.isAfter(last);
-        current = current.add(const Duration(days: 1))) {
+    for (
+      var current = first;
+      !current.isAfter(last);
+      current = current.add(const Duration(days: 1))
+    ) {
       if (_isWithinSelectedForecastRange(current)) {
         return true;
       }
@@ -4213,6 +4767,569 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     return pieces.join(' • ');
   }
 
+  _HistoricalAnalyticsSnapshot _calculateHistoricalAnalytics(
+    List<TransactionRecord> allTransactions,
+  ) {
+    final range = _resolveActiveDateRange();
+    final filtered = <TransactionRecord>[];
+    final previous = <TransactionRecord>[];
+
+    for (final record in allTransactions) {
+      final day = _dateOnly(record.timestamp);
+      if (!day.isBefore(range.start) && !day.isAfter(range.end)) {
+        filtered.add(record);
+      } else if (!day.isBefore(range.previousStart) &&
+          !day.isAfter(range.previousEnd)) {
+        previous.add(record);
+      }
+    }
+
+    final totalRevenue = filtered.fold<double>(
+      0.0,
+      (sum, record) => sum + record.saleAmount,
+    );
+    final totalOrders = filtered.length;
+    final averageOrderValue = totalOrders == 0
+        ? 0.0
+        : totalRevenue / totalOrders;
+
+    final previousRevenue = previous.fold<double>(
+      0.0,
+      (sum, record) => sum + record.saleAmount,
+    );
+    final previousOrders = previous.length;
+    final previousAverageOrderValue = previousOrders == 0
+        ? 0.0
+        : previousRevenue / previousOrders;
+
+    final revenueChangePercent = _percentChange(totalRevenue, previousRevenue);
+    final orderChangePercent = _percentChange(
+      totalOrders.toDouble(),
+      previousOrders.toDouble(),
+    );
+    final aovChangePercent = _percentChange(
+      averageOrderValue,
+      previousAverageOrderValue,
+    );
+
+    final dailyTotals = <DateTime, double>{};
+    for (final record in filtered) {
+      final day = _dateOnly(record.timestamp);
+      dailyTotals[day] = (dailyTotals[day] ?? 0) + record.saleAmount;
+    }
+
+    final dailyPoints = <_DailyRevenuePoint>[];
+    double maxDailyRevenue = 0;
+    for (var i = 0; i < range.lengthInDays; i++) {
+      final day = _dateOnly(range.start.add(Duration(days: i)));
+      final revenue = dailyTotals[day] ?? 0;
+      maxDailyRevenue = math.max(maxDailyRevenue, revenue);
+      dailyPoints.add(_DailyRevenuePoint(date: day, revenue: revenue));
+    }
+
+    final salesTrendMaxY = maxDailyRevenue <= 0
+        ? 0.0
+        : _niceCeiling(maxDailyRevenue * 1.1);
+
+    final categoryAggregates = <String, _CategoryAggregate>{};
+    final itemAggregates = <String, _TopSellerAggregate>{};
+    final paymentAggregates = <String, _PaymentAggregate>{};
+    final channelAggregates = <String, _ChannelAccumulator>{};
+    final heatmapMatrix = <int, List<double>>{};
+    final hourBuckets = <int>{};
+    double heatmapMaxValue = 0.0;
+    double peakSlotValue = 0.0;
+    int? peakSlotHour;
+    int? peakSlotDay;
+
+    for (final record in filtered) {
+      final revenue = record.saleAmount;
+      final dayIndex = (record.timestamp.weekday + 6) % 7;
+      final hour = record.timestamp.hour;
+
+      final row = heatmapMatrix.putIfAbsent(
+        hour,
+        () => List<double>.filled(7, 0.0),
+      );
+      row[dayIndex] += revenue;
+      heatmapMaxValue = math.max(heatmapMaxValue, row[dayIndex]);
+      if (row[dayIndex] > peakSlotValue) {
+        peakSlotValue = row[dayIndex];
+        peakSlotHour = hour;
+        peakSlotDay = dayIndex;
+      }
+      hourBuckets.add(hour);
+
+      final channelName = _resolveChannel(record);
+      final channelAcc = channelAggregates.putIfAbsent(
+        channelName,
+        () => _ChannelAccumulator(),
+      );
+      channelAcc.revenue += revenue;
+      channelAcc.orders += 1;
+      final slotKey = '${dayIndex}_$hour';
+      final slotValue = (channelAcc.slotTotals[slotKey] ?? 0) + revenue;
+      channelAcc.slotTotals[slotKey] = slotValue;
+      if (slotValue > channelAcc.bestSlotValue) {
+        channelAcc.bestSlotValue = slotValue;
+        channelAcc.bestHour = hour;
+        channelAcc.bestDayIndex = dayIndex;
+      }
+
+      final paymentMethod = record.paymentMethod.trim().isEmpty
+          ? 'Unknown'
+          : record.paymentMethod.trim();
+      final paymentAcc = paymentAggregates.putIfAbsent(
+        paymentMethod,
+        () => _PaymentAggregate(),
+      );
+      paymentAcc.count += 1;
+      paymentAcc.amount += revenue;
+
+      for (final item in record.items) {
+        final rawCategory = (item.categoryLabel ?? item.category)?.trim();
+        final categoryName = (rawCategory != null && rawCategory.isNotEmpty)
+            ? rawCategory
+            : 'Uncategorized';
+        final categoryAcc = categoryAggregates.putIfAbsent(
+          categoryName,
+          () => _CategoryAggregate(),
+        );
+        categoryAcc.quantity += item.quantity;
+        categoryAcc.revenue += item.totalPrice;
+
+        final itemAcc = itemAggregates.putIfAbsent(
+          item.name,
+          () => _TopSellerAggregate(item.name),
+        );
+        itemAcc.quantity += item.quantity;
+        itemAcc.revenue += item.totalPrice;
+      }
+    }
+
+    final categoryBreakdown =
+        categoryAggregates.entries
+            .map(
+              (entry) => _CategoryBreakdown(
+                name: entry.key,
+                quantity: entry.value.quantity,
+                revenue: entry.value.revenue,
+              ),
+            )
+            .toList()
+          ..sort((a, b) {
+            final revenueCompare = b.revenue.compareTo(a.revenue);
+            return revenueCompare != 0
+                ? revenueCompare
+                : b.quantity.compareTo(a.quantity);
+          });
+
+    final maxCategoryQuantity = categoryBreakdown.isEmpty
+        ? 0
+        : categoryBreakdown.map((c) => c.quantity).reduce(math.max);
+
+    final topSellers =
+        itemAggregates.values
+            .map(
+              (value) => _TopSeller(
+                name: value.name,
+                quantity: value.quantity,
+                revenue: value.revenue,
+              ),
+            )
+            .toList()
+          ..sort((a, b) {
+            final revenueCompare = b.revenue.compareTo(a.revenue);
+            return revenueCompare != 0
+                ? revenueCompare
+                : b.quantity.compareTo(a.quantity);
+          });
+    if (topSellers.length > 10) {
+      topSellers.removeRange(10, topSellers.length);
+    }
+
+    final paymentBreakdown =
+        paymentAggregates.entries
+            .map(
+              (entry) => _PaymentBreakdown(
+                method: entry.key,
+                count: entry.value.count,
+                amount: entry.value.amount,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.amount.compareTo(a.amount));
+
+    final totalPaymentRevenue = paymentBreakdown.fold<double>(
+      0.0,
+      (sum, item) => sum + item.amount,
+    );
+
+    final sortedHours = hourBuckets.toList()..sort();
+    final heatmapValues = sortedHours
+        .map(
+          (hour) => List<double>.from(
+            heatmapMatrix[hour] ?? List<double>.filled(7, 0.0),
+          ),
+        )
+        .toList();
+
+    final hasTransactions = filtered.isNotEmpty;
+    final heatmapSummary = !hasTransactions
+        ? 'No transactions yet.'
+        : (peakSlotHour != null && peakSlotValue > 0)
+        ? 'Busiest window: ${_dayNames[peakSlotDay ?? 0]} '
+              '${_formatHourRange(peakSlotHour!)} '
+              '(${Formatters.formatCurrency(peakSlotValue)})'
+        : 'No significant peak detected in this range.';
+
+    final channelBreakdown = channelAggregates.entries.map((entry) {
+      final acc = entry.value;
+      final share = totalRevenue <= 0
+          ? 0.0
+          : (acc.revenue / totalRevenue).clamp(0.0, 1.0);
+      String? peakLabel;
+      if (acc.bestHour != null && acc.bestSlotValue > 0) {
+        final dayName = _dayNames[acc.bestDayIndex ?? 0];
+        peakLabel = '$dayName ${_formatHourRange(acc.bestHour!)}';
+      }
+      return _ChannelBreakdown(
+        name: entry.key,
+        orders: acc.orders,
+        revenue: acc.revenue,
+        share: share,
+        peakLabel: peakLabel,
+      );
+    }).toList()..sort((a, b) => b.revenue.compareTo(a.revenue));
+
+    final peakHourRevenue = (peakSlotHour != null && peakSlotValue > 0)
+        ? peakSlotValue
+        : 0.0;
+    final peakHourWindowLabel = (peakSlotHour != null && peakSlotValue > 0)
+        ? '${_dayNames[peakSlotDay ?? 0]} ${_formatHourRange(peakSlotHour!)}'
+        : '—';
+
+    return _HistoricalAnalyticsSnapshot(
+      filteredTransactions: filtered,
+      totalRevenue: totalRevenue,
+      totalOrders: totalOrders,
+      averageOrderValue: averageOrderValue,
+      revenueChangePercent: revenueChangePercent,
+      orderChangePercent: orderChangePercent,
+      aovChangePercent: aovChangePercent,
+      dailyRevenuePoints: dailyPoints,
+      salesTrendMaxY: salesTrendMaxY,
+      categoryBreakdown: categoryBreakdown,
+      maxCategoryQuantity: maxCategoryQuantity,
+      channelBreakdown: channelBreakdown,
+      topSellers: topSellers,
+      paymentBreakdown: paymentBreakdown,
+      totalPaymentRevenue: totalPaymentRevenue,
+      heatmapHours: sortedHours,
+      heatmapValues: heatmapValues,
+      heatmapMaxValue: heatmapMaxValue,
+      heatmapSummary: heatmapSummary,
+      peakHourRevenue: peakHourRevenue,
+      peakHourWindowLabel: peakHourWindowLabel,
+    );
+  }
+
+  void _applyAnalyticsSnapshot(_HistoricalAnalyticsSnapshot snapshot) {
+    _filteredTransactions = snapshot.filteredTransactions;
+    _totalRevenue = snapshot.totalRevenue;
+    _totalOrders = snapshot.totalOrders;
+    _averageOrderValue = snapshot.averageOrderValue;
+    _revenueChangePercent = snapshot.revenueChangePercent;
+    _orderChangePercent = snapshot.orderChangePercent;
+    _aovChangePercent = snapshot.aovChangePercent;
+    _dailyRevenuePoints = snapshot.dailyRevenuePoints;
+    _salesTrendMaxY = snapshot.salesTrendMaxY;
+    _categoryBreakdown = snapshot.categoryBreakdown;
+    _maxCategoryQuantity = snapshot.maxCategoryQuantity;
+    _channelBreakdown = snapshot.channelBreakdown;
+    _topSellers = snapshot.topSellers;
+    _paymentBreakdown = snapshot.paymentBreakdown;
+    _totalPaymentRevenue = snapshot.totalPaymentRevenue;
+    _heatmapHours = snapshot.heatmapHours;
+    _heatmapValues = snapshot.heatmapValues;
+    _heatmapMaxValue = snapshot.heatmapMaxValue;
+    _heatmapSummary = snapshot.heatmapSummary;
+    _peakHourRevenue = snapshot.peakHourRevenue;
+    _peakHourWindowLabel = snapshot.peakHourWindowLabel;
+  }
+
+  _ResolvedDateRange _resolveActiveDateRange() {
+    final today = DateTime.now();
+    DateTime start = _startDate ?? today.subtract(const Duration(days: 6));
+    DateTime end = _endDate ?? _startDate ?? today;
+
+    start = _dateOnly(start);
+    end = _dateOnly(end);
+
+    if (start.isAfter(end)) {
+      final temp = start;
+      start = end;
+      end = temp;
+    }
+
+    final lengthInDays = end.difference(start).inDays + 1;
+    final previousEnd = start.subtract(const Duration(days: 1));
+    final previousStart = previousEnd.subtract(
+      Duration(days: lengthInDays - 1),
+    );
+
+    return _ResolvedDateRange(
+      start: start,
+      end: end,
+      previousStart: _dateOnly(previousStart),
+      previousEnd: _dateOnly(previousEnd),
+      lengthInDays: lengthInDays,
+    );
+  }
+
+  double? _percentChange(double current, double previous) {
+    if (current.isNaN || previous.isNaN) {
+      return null;
+    }
+    if (current.isInfinite || previous.isInfinite) {
+      return null;
+    }
+    if (previous.abs() < 0.0001) {
+      if (current.abs() < 0.0001) {
+        return 0;
+      }
+      return double.nan;
+    }
+    final delta = ((current - previous) / previous) * 100;
+    if (delta.isNaN || delta.isInfinite) {
+      return null;
+    }
+    return delta;
+  }
+
+  DateTime _dateOnly(DateTime value) =>
+      DateTime(value.year, value.month, value.day);
+
+  double _niceCeiling(double value) {
+    if (value <= 0) {
+      return 0;
+    }
+    final log10 = math.log(value) / math.ln10;
+    final magnitude = math.pow(10, log10.floor()).toDouble();
+    final normalized = value / magnitude;
+
+    double niceNormalized;
+    if (normalized <= 1) {
+      niceNormalized = 1;
+    } else if (normalized <= 2) {
+      niceNormalized = 2;
+    } else if (normalized <= 5) {
+      niceNormalized = 5;
+    } else {
+      niceNormalized = 10;
+    }
+
+    return niceNormalized * magnitude;
+  }
+
+  double _computeYAxisInterval(double maxY) {
+    if (maxY <= 0) {
+      return 100;
+    }
+    final target = maxY / 5;
+    final magnitude = math
+        .pow(10, (math.log(target) / math.ln10).floor())
+        .toDouble();
+    final normalized = target / magnitude;
+    double niceNormalized;
+    if (normalized <= 1) {
+      niceNormalized = 1;
+    } else if (normalized <= 2) {
+      niceNormalized = 2;
+    } else if (normalized <= 5) {
+      niceNormalized = 5;
+    } else {
+      niceNormalized = 10;
+    }
+    final interval = niceNormalized * magnitude;
+    return interval <= 0 ? 1 : interval;
+  }
+
+  String? _formatDelta(double? percent) {
+    if (percent == null) {
+      return null;
+    }
+    if (percent.isNaN) {
+      return 'New';
+    }
+    if (percent.abs() < 0.05) {
+      return '0%';
+    }
+    final precision = percent.abs() >= 10 ? 0 : 1;
+    final sign = percent > 0 ? '+' : '';
+    return '$sign${percent.toStringAsFixed(precision)}%';
+  }
+
+  Color _deltaColor(double? percent) {
+    if (percent == null || percent.isNaN || percent.abs() < 0.05) {
+      return AppConstants.textSecondary;
+    }
+    if (percent > 0) {
+      return AppConstants.successGreen;
+    }
+    if (percent < 0) {
+      return AppConstants.errorRed;
+    }
+    return AppConstants.textSecondary;
+  }
+
+  Color _priorityColor(_ForecastInsightPriority priority) {
+    switch (priority) {
+      case _ForecastInsightPriority.high:
+        return AppConstants.errorRed;
+      case _ForecastInsightPriority.medium:
+        return AppConstants.warningYellow;
+      case _ForecastInsightPriority.low:
+        return AppConstants.textSecondary;
+    }
+  }
+
+  String _priorityLabel(_ForecastInsightPriority priority) {
+    switch (priority) {
+      case _ForecastInsightPriority.high:
+        return 'High';
+      case _ForecastInsightPriority.medium:
+        return 'Medium';
+      case _ForecastInsightPriority.low:
+        return 'Low';
+    }
+  }
+
+  _ForecastInsightVisual _insightVisualForKind(_ForecastInsightKind kind) {
+    switch (kind) {
+      case _ForecastInsightKind.staffing:
+        return const _ForecastInsightVisual(
+          icon: Icons.people_alt,
+          accentColor: AppConstants.primaryOrange,
+        );
+      case _ForecastInsightKind.inventory:
+        return const _ForecastInsightVisual(
+          icon: Icons.inventory_2,
+          accentColor: AppConstants.successGreen,
+        );
+      case _ForecastInsightKind.promo:
+        return const _ForecastInsightVisual(
+          icon: Icons.campaign,
+          accentColor: Colors.lightBlue,
+        );
+      case _ForecastInsightKind.general:
+      default:
+        return const _ForecastInsightVisual(
+          icon: Icons.insights,
+          accentColor: AppConstants.primaryOrange,
+        );
+    }
+  }
+
+  String _formatHourLabel(int hour) {
+    final time = DateTime(0, 1, 1, hour);
+    return DateFormat('h a').format(time);
+  }
+
+  String _formatHourRange(int hour) {
+    final start = DateTime(0, 1, 1, hour);
+    final end = start.add(const Duration(hours: 1));
+    final startLabel = DateFormat('h a').format(start);
+    final endLabel = DateFormat('h a').format(end);
+    return '$startLabel - $endLabel';
+  }
+
+  String _normalizeChannelName(String value) {
+    final lower = value.trim().toLowerCase();
+    if (lower.isEmpty) {
+      return 'Dine-In';
+    }
+    if (lower.contains('dine') || lower.contains('table')) {
+      return 'Dine-In';
+    }
+    if (lower.contains('take') ||
+        lower.contains('to-go') ||
+        lower.contains('carry')) {
+      return 'Takeout';
+    }
+    if (lower.contains('deliver')) {
+      return 'Delivery';
+    }
+    if (lower.contains('pickup') || lower.contains('pick-up')) {
+      return 'Pickup';
+    }
+    if (lower.contains('online') ||
+        lower.contains('web') ||
+        lower.contains('app')) {
+      return 'Online';
+    }
+    if (lower.contains('curb') || lower.contains('drive')) {
+      return 'Curbside';
+    }
+    if (lower.contains('walk')) {
+      return 'Walk-In';
+    }
+    if (lower.contains('kiosk')) {
+      return 'Kiosk';
+    }
+    return value.trim();
+  }
+
+  String _resolveChannel(TransactionRecord record) {
+    final metadata = record.metadata ?? {};
+    final candidates = <String?>[
+      metadata['channel']?.toString(),
+      metadata['orderChannel']?.toString(),
+      metadata['orderType']?.toString(),
+      metadata['source']?.toString(),
+      record.tableNumber,
+    ];
+    for (final candidate in candidates) {
+      if (candidate == null) {
+        continue;
+      }
+      final normalized = _normalizeChannelName(candidate);
+      if (normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+    return 'Dine-In';
+  }
+
+  IconData _channelIcon(String channelName) {
+    final lower = channelName.toLowerCase();
+    if (lower.contains('dine')) {
+      return Icons.restaurant_menu;
+    }
+    if (lower.contains('take')) {
+      return Icons.shopping_bag;
+    }
+    if (lower.contains('deliver')) {
+      return Icons.delivery_dining;
+    }
+    if (lower.contains('pickup')) {
+      return Icons.storefront;
+    }
+    if (lower.contains('online') || lower.contains('app')) {
+      return Icons.smartphone;
+    }
+    if (lower.contains('curb') || lower.contains('drive')) {
+      return Icons.directions_car;
+    }
+    if (lower.contains('walk')) {
+      return Icons.directions_walk;
+    }
+    if (lower.contains('kiosk')) {
+      return Icons.point_of_sale;
+    }
+    return Icons.receipt_long;
+  }
+
   /// Export report
   void _exportReport() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -4222,4 +5339,234 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       ),
     );
   }
+}
+
+class _ResolvedDateRange {
+  const _ResolvedDateRange({
+    required this.start,
+    required this.end,
+    required this.previousStart,
+    required this.previousEnd,
+    required this.lengthInDays,
+  });
+
+  final DateTime start;
+  final DateTime end;
+  final DateTime previousStart;
+  final DateTime previousEnd;
+  final int lengthInDays;
+}
+
+class _HistoricalAnalyticsSnapshot {
+  _HistoricalAnalyticsSnapshot({
+    required List<TransactionRecord> filteredTransactions,
+    required this.totalRevenue,
+    required this.totalOrders,
+    required this.averageOrderValue,
+    required this.revenueChangePercent,
+    required this.orderChangePercent,
+    required this.aovChangePercent,
+    required List<_DailyRevenuePoint> dailyRevenuePoints,
+    required this.salesTrendMaxY,
+    required List<_CategoryBreakdown> categoryBreakdown,
+    required this.maxCategoryQuantity,
+    required List<_ChannelBreakdown> channelBreakdown,
+    required List<_TopSeller> topSellers,
+    required List<_PaymentBreakdown> paymentBreakdown,
+    required this.totalPaymentRevenue,
+    required List<int> heatmapHours,
+    required List<List<double>> heatmapValues,
+    required this.heatmapMaxValue,
+    required this.heatmapSummary,
+    required this.peakHourRevenue,
+    required this.peakHourWindowLabel,
+  }) : filteredTransactions = List<TransactionRecord>.unmodifiable(
+         filteredTransactions,
+       ),
+       dailyRevenuePoints = List<_DailyRevenuePoint>.unmodifiable(
+         dailyRevenuePoints,
+       ),
+       categoryBreakdown = List<_CategoryBreakdown>.unmodifiable(
+         categoryBreakdown,
+       ),
+       channelBreakdown = List<_ChannelBreakdown>.unmodifiable(
+         channelBreakdown,
+       ),
+       topSellers = List<_TopSeller>.unmodifiable(topSellers),
+       paymentBreakdown = List<_PaymentBreakdown>.unmodifiable(
+         paymentBreakdown,
+       ),
+       heatmapHours = List<int>.unmodifiable(heatmapHours),
+       heatmapValues = List<List<double>>.unmodifiable(
+         heatmapValues.map((row) => List<double>.unmodifiable(row)),
+       );
+
+  final List<TransactionRecord> filteredTransactions;
+  final double totalRevenue;
+  final int totalOrders;
+  final double averageOrderValue;
+  final double? revenueChangePercent;
+  final double? orderChangePercent;
+  final double? aovChangePercent;
+  final List<_DailyRevenuePoint> dailyRevenuePoints;
+  final double salesTrendMaxY;
+  final List<_CategoryBreakdown> categoryBreakdown;
+  final int maxCategoryQuantity;
+  final List<_ChannelBreakdown> channelBreakdown;
+  final List<_TopSeller> topSellers;
+  final List<_PaymentBreakdown> paymentBreakdown;
+  final double totalPaymentRevenue;
+  final List<int> heatmapHours;
+  final List<List<double>> heatmapValues;
+  final double heatmapMaxValue;
+  final String heatmapSummary;
+  final double peakHourRevenue;
+  final String peakHourWindowLabel;
+}
+
+class _DailyRevenuePoint {
+  const _DailyRevenuePoint({required this.date, required this.revenue});
+
+  final DateTime date;
+  final double revenue;
+}
+
+class _CategoryBreakdown {
+  const _CategoryBreakdown({
+    required this.name,
+    required this.quantity,
+    required this.revenue,
+  });
+
+  final String name;
+  final int quantity;
+  final double revenue;
+}
+
+class _ChannelBreakdown {
+  const _ChannelBreakdown({
+    required this.name,
+    required this.orders,
+    required this.revenue,
+    required this.share,
+    this.peakLabel,
+  });
+
+  final String name;
+  final int orders;
+  final double revenue;
+  final double share;
+  final String? peakLabel;
+}
+
+class _TopSeller {
+  const _TopSeller({
+    required this.name,
+    required this.quantity,
+    required this.revenue,
+  });
+
+  final String name;
+  final int quantity;
+  final double revenue;
+}
+
+class _PaymentBreakdown {
+  const _PaymentBreakdown({
+    required this.method,
+    required this.count,
+    required this.amount,
+  });
+
+  final String method;
+  final int count;
+  final double amount;
+}
+
+class _CategoryAggregate {
+  int quantity = 0;
+  double revenue = 0;
+}
+
+class _TopSellerAggregate {
+  _TopSellerAggregate(this.name);
+
+  final String name;
+  int quantity = 0;
+  double revenue = 0;
+}
+
+class _PaymentAggregate {
+  int count = 0;
+  double amount = 0;
+}
+
+class _ChannelAccumulator {
+  double revenue = 0;
+  int orders = 0;
+  final Map<String, double> slotTotals = <String, double>{};
+  double bestSlotValue = 0;
+  int? bestHour;
+  int? bestDayIndex;
+}
+
+enum _ForecastInsightPriority {
+  low,
+  medium,
+  high,
+}
+
+enum _ForecastInsightKind {
+  general,
+  staffing,
+  inventory,
+  promo,
+}
+
+class _ForecastInsight {
+  const _ForecastInsight({
+    required this.text,
+    required this.priority,
+    required this.kind,
+    this.actionLabel,
+  });
+
+  final String text;
+  final _ForecastInsightPriority priority;
+  final _ForecastInsightKind kind;
+  final String? actionLabel;
+}
+
+class _ForecastActionRecommendation {
+  const _ForecastActionRecommendation({
+    required this.title,
+    required this.subtitle,
+    required this.kind,
+    required this.priority,
+  });
+
+  final String title;
+  final String subtitle;
+  final _ForecastInsightKind kind;
+  final _ForecastInsightPriority priority;
+}
+
+class _ForecastInsightResult {
+  const _ForecastInsightResult({
+    required this.action,
+    required this.insights,
+  });
+
+  final _ForecastActionRecommendation action;
+  final List<_ForecastInsight> insights;
+}
+
+class _ForecastInsightVisual {
+  const _ForecastInsightVisual({
+    required this.icon,
+    required this.accentColor,
+  });
+
+  final IconData icon;
+  final Color accentColor;
 }

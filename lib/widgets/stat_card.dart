@@ -72,30 +72,43 @@ class StatCard extends StatelessWidget {
               ),
             ),
             // Percentage change (if provided)
-            if (percentageChange != null) ...[
+            if (percentageChange != null && percentageChange!.trim().isNotEmpty) ...[
               const SizedBox(height: AppConstants.paddingSmall),
-              Row(
-                children: [
-                  Icon(
-                    percentageChange!.startsWith('+') 
-                        ? Icons.arrow_upward 
-                        : Icons.arrow_downward,
-                    color: percentageChange!.startsWith('+') 
-                        ? AppConstants.successGreen 
-                        : Colors.red,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    percentageChange!,
-                    style: AppConstants.bodySmall.copyWith(
-                      color: percentageChange!.startsWith('+') 
-                          ? AppConstants.successGreen 
-                          : Colors.red,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
+              Builder(
+                builder: (context) {
+                  final trimmed = percentageChange!.trim();
+                  final isDelta = trimmed.startsWith('+') || trimmed.startsWith('-');
+                  if (!isDelta) {
+                    return Text(
+                      percentageChange!,
+                      style: AppConstants.bodySmall.copyWith(
+                        color: AppConstants.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    );
+                  }
+
+                  final isPositive = trimmed.startsWith('+');
+                  final color = isPositive ? AppConstants.successGreen : Colors.red;
+
+                  return Row(
+                    children: [
+                      Icon(
+                        isPositive ? Icons.arrow_upward : Icons.arrow_downward,
+                        color: color,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        trimmed,
+                        style: AppConstants.bodySmall.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ],
