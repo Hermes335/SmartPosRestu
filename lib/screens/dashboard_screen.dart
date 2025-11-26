@@ -9,6 +9,21 @@ import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/stat_card.dart';
 
+enum DashboardPeriod { timely, daily, weekly }
+
+extension DashboardPeriodX on DashboardPeriod {
+  String get label {
+    switch (this) {
+      case DashboardPeriod.timely:
+        return 'Timely';
+      case DashboardPeriod.daily:
+        return 'Daily';
+      case DashboardPeriod.weekly:
+        return 'Weekly';
+    }
+  }
+}
+
 /// Sales Dashboard - Home screen with key metrics and quick stats
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TransactionService _transactionService = TransactionService();
   final NumberFormat _countFormatter = NumberFormat.decimalPattern();
 
-  String _selectedPeriod = 'Timely';
+  DashboardPeriod _selectedPeriod = DashboardPeriod.timely;
   bool _isLoading = true;
   String? _error;
 
@@ -35,7 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double? _aovChangePercent;
   double? _customerChangePercent;
 
-  Map<String, _ChartSeries> _chartData = {};
+  Map<DashboardPeriod, _ChartSeries> _chartData = {};
   List<_DashboardInsight> _insights = const [];
   List<_TopSellingItem> _topSellingItems = const [];
 
@@ -173,8 +188,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppConstants.primaryOrange,
-            AppConstants.accentOrange,
+            const Color.fromARGB(255, 238, 65, 2),
+            const Color.fromARGB(255, 203, 130, 85),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -289,11 +304,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
                 ),
                 child: Row(
-                  children: [
-                    _buildPeriodButton('Timely'),
-                    _buildPeriodButton('Daily'),
-                    _buildPeriodButton('Weekly'),
-                  ],
+                  children: DashboardPeriod.values
+                      .map(_buildPeriodButton)
+                      .toList(),
                 ),
               ),
             ],
@@ -310,7 +323,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Period toggle button
-  Widget _buildPeriodButton(String period) {
+  Widget _buildPeriodButton(DashboardPeriod period) {
     final isSelected = _selectedPeriod == period;
     return GestureDetector(
       onTap: () {
@@ -330,7 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
         ),
         child: Text(
-          period,
+          period.label,
           style: AppConstants.bodySmall.copyWith(
             color: isSelected ? Colors.white : AppConstants.textSecondary,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -454,68 +467,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// AI Recommendations section
   Widget _buildAIRecommendations() {
     if (_insights.isEmpty) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor),
-        ),
-        child: Text(
-          'No insights yet. Keep logging transactions to unlock AI summaries.',
-          style: AppConstants.bodySmall.copyWith(
-            color: AppConstants.textSecondary,
-          ),
-        ),
+      return const _EmptyDashboardCard(
+        message: 'No insights yet. Keep logging transactions to unlock AI summaries.',
       );
     }
 
     return Column(
       children: _insights.map((insight) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
-          padding: const EdgeInsets.all(AppConstants.paddingMedium),
-          decoration: BoxDecoration(
-            color: AppConstants.cardBackground,
-            borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-            border: Border.all(color: AppConstants.dividerColor, width: 1),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppConstants.paddingSmall),
-                decoration: BoxDecoration(
-                  color: insight.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
-                ),
-                child: Icon(insight.icon, color: insight.color, size: 24),
-              ),
-              const SizedBox(width: AppConstants.paddingMedium),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      insight.title,
-                      style: AppConstants.bodyLarge.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      insight.description,
-                      style: AppConstants.bodySmall.copyWith(
-                        color: AppConstants.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
+        return _InsightCard(insight: insight);
       }).toList(),
     );
   }
@@ -523,19 +482,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Top selling items list
   Widget _buildTopSellingItems() {
     if (_topSellingItems.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
-        child: Text(
-          'No sales recorded for the selected window.',
-          style: AppConstants.bodySmall.copyWith(
-            color: AppConstants.textSecondary,
-          ),
-        ),
+      return const _EmptyDashboardCard(
+        message: 'No sales recorded for the selected window.',
       );
     }
 
@@ -558,32 +506,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         itemBuilder: (context, index) {
           final item = _topSellingItems[index];
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundColor: AppConstants.primaryOrange.withValues(alpha: 0.2),
-              child: Text(
-                '${index + 1}',
-                style: AppConstants.bodyMedium.copyWith(
-                  color: AppConstants.primaryOrange,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            title: Text(
-              item.name,
-              style: AppConstants.bodyLarge,
-            ),
-            subtitle: Text(
-              '${item.quantity} sold',
-              style: AppConstants.bodySmall,
-            ),
-            trailing: Text(
-              Formatters.formatCurrency(item.revenue),
-              style: AppConstants.bodyLarge.copyWith(
-                color: AppConstants.successGreen,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+          return _TopSellerTile(
+            item: item,
+            rank: index + 1,
           );
         },
       ),
@@ -646,18 +571,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final aovChange = _percentChange(todayAov, yesterdayAov);
       final customerChange = _percentChange(todayCustomers.toDouble(), yesterdayCustomers.toDouble());
 
-      final chartData = <String, _ChartSeries>{
-        // 'Timely' shows intra-day buckets (previously 'Daily')
-        'Timely': _buildDailySeries(todayTxns),
-        // 'Daily' shows day-by-day totals for the week (previously 'Weekly')
-        'Daily': _buildWeeklySeries(weekTxns, weekStart),
-        // 'Weekly' shows week-by-week totals for the month (previously 'Monthly')
-        'Weekly': _buildMonthlySeries(monthTxns, monthStart),
+      final chartData = <DashboardPeriod, _ChartSeries>{
+        // Timely shows intra-day buckets (previously 'Daily')
+        DashboardPeriod.timely: _buildDailySeries(todayTxns),
+        // Daily shows day-by-day totals for the week (previously 'Weekly')
+        DashboardPeriod.daily: _buildWeeklySeries(weekTxns, weekStart),
+        // Weekly shows week-by-week totals for the month (previously 'Monthly')
+        DashboardPeriod.weekly: _buildMonthlySeries(monthTxns, monthStart),
       };
 
       final topItems = _computeTopItems(weekTxns);
       final insights = _buildInsights(
-        chartData['Daily'],
+        chartData[DashboardPeriod.daily],
         topItems,
         todaySales,
         salesChange,
@@ -1041,4 +966,120 @@ class _MetricData {
   final IconData icon;
   final Color color;
   final String? change;
+}
+
+class _EmptyDashboardCard extends StatelessWidget {
+  const _EmptyDashboardCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.dividerColor),
+      ),
+      child: Text(
+        message,
+        style: AppConstants.bodySmall.copyWith(
+          color: AppConstants.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+class _InsightCard extends StatelessWidget {
+  const _InsightCard({required this.insight});
+
+  final _DashboardInsight insight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.dividerColor, width: 1),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppConstants.paddingSmall),
+            decoration: BoxDecoration(
+              color: insight.color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+            ),
+            child: Icon(insight.icon, color: insight.color, size: 24),
+          ),
+          const SizedBox(width: AppConstants.paddingMedium),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  insight.title,
+                  style: AppConstants.bodyLarge.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  insight.description,
+                  style: AppConstants.bodySmall.copyWith(
+                    color: AppConstants.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TopSellerTile extends StatelessWidget {
+  const _TopSellerTile({required this.item, required this.rank});
+
+  final _TopSellingItem item;
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: AppConstants.primaryOrange.withValues(alpha: 0.2),
+        child: Text(
+          '$rank',
+          style: AppConstants.bodyMedium.copyWith(
+            color: AppConstants.primaryOrange,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      title: Text(
+        item.name,
+        style: AppConstants.bodyLarge,
+      ),
+      subtitle: Text(
+        '${item.quantity} sold',
+        style: AppConstants.bodySmall,
+      ),
+      trailing: Text(
+        Formatters.formatCurrency(item.revenue),
+        style: AppConstants.bodyLarge.copyWith(
+          color: AppConstants.successGreen,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
 }

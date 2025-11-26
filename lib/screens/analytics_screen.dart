@@ -15,6 +15,32 @@ import '../utils/constants.dart';
 import '../utils/formatters.dart';
 import '../widgets/stat_card.dart';
 
+enum ForecastRangeOption { sevenDays, fourteenDays, thirtyDays }
+
+extension ForecastRangeOptionX on ForecastRangeOption {
+  String get label {
+    switch (this) {
+      case ForecastRangeOption.sevenDays:
+        return '7 Days';
+      case ForecastRangeOption.fourteenDays:
+        return '14 Days';
+      case ForecastRangeOption.thirtyDays:
+        return '30 Days';
+    }
+  }
+
+  int get days {
+    switch (this) {
+      case ForecastRangeOption.sevenDays:
+        return 7;
+      case ForecastRangeOption.fourteenDays:
+        return 14;
+      case ForecastRangeOption.thirtyDays:
+        return 30;
+    }
+  }
+}
+
 /// Sales & Performance Analysis screen with AI forecasting
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -71,7 +97,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   DateTime _forecastRangeEnd = DateTime.now();
 
   // Date range filters
-  String _selectedForecastRange = '7 Days';
+  ForecastRangeOption _selectedForecastRange = ForecastRangeOption.sevenDays;
 
   // Date range picker
   DateTime? _startDate;
@@ -456,7 +482,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppConstants.primaryOrange.withOpacity(0.2),
+                        color:
+                            AppConstants.primaryOrange.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
@@ -494,11 +521,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildForecastRangeButton('7 Days'),
-                        _buildForecastRangeButton('14 Days'),
-                        _buildForecastRangeButton('30 Days'),
-                      ],
+                      children: ForecastRangeOption.values
+                          .map(_buildForecastRangeButton)
+                          .toList(),
                     ),
                   ),
                 ),
@@ -651,7 +676,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   /// Forecast Range toggle button
-  Widget _buildForecastRangeButton(String range) {
+  Widget _buildForecastRangeButton(ForecastRangeOption range) {
     final isSelected = _selectedForecastRange == range;
     return GestureDetector(
       onTap: () async {
@@ -670,7 +695,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
         ),
         child: Text(
-          range,
+          range.label,
           style: AppConstants.bodySmall.copyWith(
             color: isSelected ? Colors.white : AppConstants.textSecondary,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -1396,13 +1421,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   /// Event and Weather Impact Analysis
   Widget _buildEventWeatherImpact() {
     if (_isImpactsLoading) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
+      return _AnalyticsCard(
         height: 200,
         child: Center(
           child: Column(
@@ -1421,13 +1440,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
 
     if (_impactsError != null) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
+      return _AnalyticsCard(
         child: Column(
           children: [
             Icon(Icons.error_outline, color: AppConstants.errorRed),
@@ -1456,33 +1469,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     final rangeLabel = _forecastRangeLabel();
 
     if (_eventImpacts.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
-        child: Column(
-          children: [
-            Icon(Icons.event_note, color: AppConstants.textSecondary),
-            const SizedBox(height: AppConstants.paddingSmall),
-            Text(
-              'No upcoming events found for $rangeLabel.',
-              style: AppConstants.bodySmall.copyWith(
-                color: AppConstants.textSecondary,
-              ),
-            ),
-            const SizedBox(height: AppConstants.paddingSmall),
-            Text(
-              'Add records in analytics_impacts covering $rangeLabel to see projections here.',
-              style: AppConstants.bodySmall.copyWith(
-                color: AppConstants.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
+      return _AnalyticsPlaceholder(
+        icon: Icons.event_note,
+        message: 'No upcoming events found for $rangeLabel.',
+        detail:
+            'Add entries in analytics_impacts that cover $rangeLabel to surface projections here.',
       );
     }
 
@@ -1492,13 +1483,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       ..sort((a, b) => a.date.compareTo(b.date));
 
     if (filteredImpacts.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
+      return _AnalyticsCard(
         child: Column(
           children: [
             Icon(Icons.event_available, color: AppConstants.textSecondary),
@@ -1515,13 +1500,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.paddingMedium),
-      decoration: BoxDecoration(
-        color: AppConstants.cardBackground,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(color: AppConstants.dividerColor, width: 1),
-      ),
+    return _AnalyticsCard(
       child: Column(
         children: filteredImpacts.map((impact) {
           final color = _eventImpactColor(impact);
@@ -1643,29 +1622,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   /// Demand Forecasting by Category
   Widget _buildCategoryDemandForecast() {
     if (_forecastCategoryDemand.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(AppConstants.paddingMedium),
-        decoration: BoxDecoration(
-          color: AppConstants.cardBackground,
-          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(color: AppConstants.dividerColor, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'No category projections yet',
-              style: AppConstants.bodyLarge,
-            ),
-            const SizedBox(height: AppConstants.paddingSmall),
-            Text(
-              'Run analytics with recent transactions to forecast category demand.',
-              style: AppConstants.bodySmall.copyWith(
-                color: AppConstants.textSecondary,
-              ),
-            ),
-          ],
-        ),
+      return const _AnalyticsPlaceholder(
+        icon: Icons.analytics_outlined,
+        message: 'No category projections yet',
+        detail:
+            'Run analytics with recent transactions to forecast category demand.',
       );
     }
 
@@ -1716,13 +1677,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       return formatted;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.paddingMedium),
-      decoration: BoxDecoration(
-        color: AppConstants.cardBackground,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(color: AppConstants.dividerColor, width: 1),
-      ),
+    return _AnalyticsCard(
       child: Column(
         children: [
           ..._forecastCategoryDemand.asMap().entries.map((entry) {
@@ -3111,10 +3066,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         flex: 2,
                         child: Text(
                           Formatters.formatCurrency(item.revenue),
-                          style: AppConstants.bodyMedium.copyWith(
-                            color: AppConstants.successGreen,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppConstants.bodyMedium,
                           textAlign: TextAlign.right,
                         ),
                       ),
@@ -4801,16 +4753,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
   }
 
-  int _selectedRangeInDays() {
-    switch (_selectedForecastRange) {
-      case '14 Days':
-        return 14;
-      case '30 Days':
-        return 30;
-      default:
-        return 7;
-    }
-  }
+  int _selectedRangeInDays() => _selectedForecastRange.days;
 
   _ForecastInsightResult _generateForecastInsights({
     required ForecastResult forecastResult,
@@ -5730,6 +5673,81 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 }
 
+class _AnalyticsCard extends StatelessWidget {
+  const _AnalyticsCard({
+    required this.child,
+    this.padding,
+    this.margin,
+    this.height,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      margin: margin,
+      padding: padding ?? const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.dividerColor, width: 1),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _AnalyticsPlaceholder extends StatelessWidget {
+  const _AnalyticsPlaceholder({
+    required this.message,
+    this.detail,
+    this.icon,
+  });
+
+  final String message;
+  final String? detail;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AnalyticsCard(
+      child: Column(
+        children: [
+          if (icon != null)
+            Icon(
+              icon,
+              color: AppConstants.textSecondary,
+            ),
+          if (icon != null)
+            const SizedBox(height: AppConstants.paddingSmall),
+          Text(
+            message,
+            style: AppConstants.bodySmall.copyWith(
+              color: AppConstants.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (detail != null) ...[
+            const SizedBox(height: AppConstants.paddingSmall),
+            Text(
+              detail!,
+              style: AppConstants.bodySmall.copyWith(
+                color: AppConstants.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ResolvedDateRange {
   const _ResolvedDateRange({
     required this.start,
@@ -5899,18 +5917,9 @@ class _ChannelAccumulator {
   int? bestDayIndex;
 }
 
-enum _ForecastInsightPriority {
-  low,
-  medium,
-  high,
-}
+enum _ForecastInsightPriority { high, medium, low }
 
-enum _ForecastInsightKind {
-  general,
-  staffing,
-  inventory,
-  promo,
-}
+enum _ForecastInsightKind { staffing, inventory, promo, general }
 
 class _ForecastInsight {
   const _ForecastInsight({
