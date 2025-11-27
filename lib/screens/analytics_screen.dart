@@ -60,30 +60,30 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     'Sat',
     'Sun',
   ];
-    final ForecastService _forecastService = ForecastService();
-    final AnalyticsCalendarService _analyticsCalendarService =
+  final ForecastService _forecastService = ForecastService();
+  final AnalyticsCalendarService _analyticsCalendarService =
       AnalyticsCalendarService();
-    late TabController _tabController;
-    List<SalesForecast> _forecasts = [];
-    List<ForecastSeriesPoint> _forecastProjectedSeries = [];
-    List<ForecastSeriesPoint> _forecastActualSeries = [];
-    List<CategoryDemandProjection> _forecastCategoryDemand = [];
-    List<ChannelDemandProjection> _forecastChannelDemand = [];
-    List<MenuItemPrediction> _forecastMenuPredictions = [];
-    List<_ForecastInsight> _forecastInsights = [];
-    _ForecastActionRecommendation? _forecastAction;
-    double _forecastTotalRevenue = 0;
-    int _forecastTotalOrders = 0;
-    double _forecastAverageOrderValue = 0;
-    double? _forecastRevenueChangePercent;
-    double? _forecastOrdersChangePercent;
-    double? _forecastAovChangePercent;
-    double _forecastAverageConfidence = 0;
-    double _forecastRecentAccuracy = 0;
-    double _forecastOverallAccuracy = 0;
-    double _forecastAccuracyTrend = 0;
-    double _forecastTrafficAccuracy = 0;
-    double _forecastPeakAccuracy = 0;
+  late TabController _tabController;
+  List<SalesForecast> _forecasts = [];
+  List<ForecastSeriesPoint> _forecastProjectedSeries = [];
+  List<ForecastSeriesPoint> _forecastActualSeries = [];
+  List<CategoryDemandProjection> _forecastCategoryDemand = [];
+  List<ChannelDemandProjection> _forecastChannelDemand = [];
+  List<MenuItemPrediction> _forecastMenuPredictions = [];
+  List<_ForecastInsight> _forecastInsights = [];
+  _ForecastActionRecommendation? _forecastAction;
+  double _forecastTotalRevenue = 0;
+  int _forecastTotalOrders = 0;
+  double _forecastAverageOrderValue = 0;
+  double? _forecastRevenueChangePercent;
+  double? _forecastOrdersChangePercent;
+  double? _forecastAovChangePercent;
+  double _forecastAverageConfidence = 0;
+  double _forecastRecentAccuracy = 0;
+  double _forecastOverallAccuracy = 0;
+  double _forecastAccuracyTrend = 0;
+  double _forecastTrafficAccuracy = 0;
+  double _forecastPeakAccuracy = 0;
   bool _isLoading = true;
   WeatherCalendarMonth? _calendarMonth;
   List<EventImpact> _eventImpacts = [];
@@ -336,6 +336,86 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
+  Widget _buildDateSelectorCard({
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(AppConstants.paddingMedium),
+      decoration: BoxDecoration(
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        border: Border.all(color: AppConstants.dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: AppConstants.bodyLarge.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppConstants.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: AppConstants.bodySmall.copyWith(
+              color: AppConstants.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _dateRangeText,
+                  style: AppConstants.bodyMedium,
+                ),
+              ),
+              if (_startDate != null)
+                IconButton(
+                  onPressed: _clearDates,
+                  icon: const Icon(Icons.clear),
+                  color: AppConstants.textSecondary,
+                ),
+            ],
+          ),
+          const SizedBox(height: AppConstants.paddingSmall),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _pickSingleDate,
+                  icon: const Icon(Icons.calendar_today, size: 18),
+                  label: const Text('Single Date'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.darkSecondary,
+                    foregroundColor: AppConstants.primaryOrange,
+                    side: const BorderSide(color: AppConstants.primaryOrange),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _pickDateRange,
+                  icon: const Icon(Icons.date_range, size: 18),
+                  label: const Text('Date Range'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppConstants.darkSecondary,
+                    foregroundColor: AppConstants.primaryOrange,
+                    side: const BorderSide(color: AppConstants.primaryOrange),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Overview tab with historical data
   Widget _buildOverviewTab() {
     return SingleChildScrollView(
@@ -343,69 +423,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Date range selector
-          Container(
-            padding: const EdgeInsets.all(AppConstants.paddingMedium),
-            decoration: BoxDecoration(
-              color: AppConstants.cardBackground,
-              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-              border: Border.all(color: AppConstants.dividerColor),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _dateRangeText,
-                        style: AppConstants.bodyMedium,
-                      ),
-                    ),
-                    if (_startDate != null)
-                      IconButton(
-                        onPressed: _clearDates,
-                        icon: const Icon(Icons.clear),
-                        color: AppConstants.textSecondary,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _pickSingleDate,
-                        icon: const Icon(Icons.calendar_today, size: 18),
-                        label: const Text('Single Date'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConstants.darkSecondary,
-                          foregroundColor: AppConstants.primaryOrange,
-                          side: const BorderSide(
-                            color: AppConstants.primaryOrange,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _pickDateRange,
-                        icon: const Icon(Icons.date_range, size: 18),
-                        label: const Text('Date Range'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppConstants.darkSecondary,
-                          foregroundColor: AppConstants.primaryOrange,
-                          side: const BorderSide(
-                            color: AppConstants.primaryOrange,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          _buildDateSelectorCard(
+            title: 'Historical Range',
+            subtitle:
+                'Select a single day or span to analyze actual performance metrics.',
           ),
           const SizedBox(height: AppConstants.paddingMedium),
 
@@ -3586,6 +3607,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           ),
           const SizedBox(height: AppConstants.paddingLarge),
 
+          _buildDateSelectorCard(
+            title: 'Comparison Range',
+            subtitle:
+                'Pick a single day or range to compare historical performance against the forecast window.',
+          ),
+          const SizedBox(height: AppConstants.paddingLarge),
+
           // Key Metrics Comparison
           const Text(
             'Key Metrics Comparison',
@@ -3631,33 +3659,125 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     );
   }
 
+  _ComparisonSummary _buildComparisonSummary() {
+    final resolvedRange = _resolveActiveDateRange();
+    final selectedDays = math.max(1, resolvedRange.lengthInDays);
+
+    final actualTotals = <DateTime, double>{};
+    for (final record in _filteredTransactions) {
+      final day = _dateOnly(record.timestamp);
+      actualTotals[day] = (actualTotals[day] ?? 0) + record.saleAmount;
+    }
+
+    final forecastDaysAvailable = _forecastProjectedSeries.length;
+    final usedDays = forecastDaysAvailable == 0
+        ? selectedDays
+        : math.min(selectedDays, forecastDaysAvailable);
+    final forecastCoveragePartial =
+        forecastDaysAvailable > 0 && forecastDaysAvailable < selectedDays;
+
+    final startOffset = selectedDays - usedDays;
+    final historicalSeries = <_DailyRevenuePoint>[];
+    for (var i = 0; i < usedDays; i++) {
+      final index = startOffset + i;
+      final date = _dateOnly(
+        resolvedRange.start.add(Duration(days: index)),
+      );
+      final revenue = actualTotals[date] ?? 0;
+      historicalSeries.add(_DailyRevenuePoint(date: date, revenue: revenue));
+    }
+
+    final forecastSeries = _forecastProjectedSeries.take(usedDays).toList();
+
+    double forecastRevenue;
+    if (forecastDaysAvailable == 0) {
+      forecastRevenue = 0;
+    } else if (selectedDays <= forecastDaysAvailable) {
+      forecastRevenue = _forecastProjectedSeries
+          .take(selectedDays)
+          .fold<double>(0, (sum, point) => sum + point.revenue);
+    } else {
+      final availableSum = _forecastProjectedSeries
+          .fold<double>(0, (sum, point) => sum + point.revenue);
+      final averagePerDay = forecastDaysAvailable == 0
+          ? 0
+          : availableSum / forecastDaysAvailable;
+      forecastRevenue = averagePerDay * selectedDays.toDouble();
+    }
+
+    final forecastAov = _forecastAverageOrderValue.isFinite
+        ? _forecastAverageOrderValue
+        : 0.0;
+    int forecastOrders;
+    if (forecastAov > 0 && forecastRevenue > 0) {
+      forecastOrders = (forecastRevenue / forecastAov).round();
+    } else if (_forecastTotalOrders > 0 && forecastDaysAvailable > 0) {
+      final avgOrdersPerDay =
+          _forecastTotalOrders / forecastDaysAvailable;
+      forecastOrders = (avgOrdersPerDay * selectedDays).round();
+    } else {
+      forecastOrders = 0;
+    }
+
+    return _ComparisonSummary(
+      selectedDays: selectedDays,
+      historicalRevenue: _totalRevenue,
+      historicalOrders: _totalOrders,
+      historicalAov: _averageOrderValue,
+      forecastRevenue: forecastRevenue,
+      forecastOrders: forecastOrders,
+      forecastAov: forecastAov > 0 ? forecastAov : 0.0,
+      historicalSeries: historicalSeries,
+      forecastSeries: forecastSeries,
+      forecastCoveragePartial: forecastCoveragePartial,
+      forecastCoverageShortfall: forecastCoveragePartial
+          ? selectedDays - forecastDaysAvailable
+          : 0,
+    );
+  }
+
   /// Metrics Comparison Cards
   Widget _buildMetricsComparison() {
+    final summary = _buildComparisonSummary();
+
+    final revenueDelta = _percentChange(
+      summary.forecastRevenue,
+      summary.historicalRevenue,
+    );
+    final ordersDelta = _percentChange(
+      summary.forecastOrders.toDouble(),
+      summary.historicalOrders.toDouble(),
+    );
+    final aovDelta = _percentChange(
+      summary.forecastAov,
+      summary.historicalAov,
+    );
+
     final metrics = [
       {
         'title': 'Total Revenue',
-        'historical': '₱45,230',
-        'forecast': '₱58,450',
-        'difference': '+29.2%',
-        'isIncrease': true,
+        'historical': Formatters.formatCurrency(summary.historicalRevenue),
+        'forecast': Formatters.formatCurrency(summary.forecastRevenue),
+        'difference': _formatDelta(revenueDelta) ?? '—',
+        'isIncrease': (revenueDelta ?? 0) >= 0,
         'icon': Icons.trending_up,
         'color': AppConstants.successGreen,
       },
       {
         'title': 'Total Orders',
-        'historical': '725',
-        'forecast': '890',
-        'difference': '+22.8%',
-        'isIncrease': true,
-        'icon': Icons.receipt,
+        'historical': summary.historicalOrders.toString(),
+        'forecast': summary.forecastOrders.toString(),
+        'difference': _formatDelta(ordersDelta) ?? '—',
+        'isIncrease': (ordersDelta ?? 0) >= 0,
+        'icon': Icons.receipt_long,
         'color': AppConstants.primaryOrange,
       },
       {
         'title': 'Avg. Order Value',
-        'historical': '₱62.40',
-        'forecast': '₱65.67',
-        'difference': '+5.2%',
-        'isIncrease': true,
+        'historical': Formatters.formatCurrency(summary.historicalAov),
+        'forecast': Formatters.formatCurrency(summary.forecastAov),
+        'difference': _formatDelta(aovDelta) ?? '—',
+        'isIncrease': (aovDelta ?? 0) >= 0,
         'icon': Icons.shopping_cart,
         'color': Colors.blue,
       },
@@ -3831,27 +3951,107 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Sales Trend Comparison Chart
   Widget _buildSalesTrendComparison() {
-    final historicalSpots = [
-      const FlSpot(0, 8500),
-      const FlSpot(1, 10200),
-      const FlSpot(2, 9800),
-      const FlSpot(3, 12500),
-      const FlSpot(4, 15200),
-      const FlSpot(5, 14800),
-      const FlSpot(6, 16500),
-    ];
+    final summary = _buildComparisonSummary();
+    final historicalSeries = summary.historicalSeries;
+    final forecastSeries = summary.forecastSeries;
 
-    final forecastSpots = [
-      const FlSpot(0, 8200),
-      const FlSpot(1, 9900),
-      const FlSpot(2, 10500),
-      const FlSpot(3, 12200),
-      const FlSpot(4, 15600),
-      const FlSpot(5, 15200),
-      const FlSpot(6, 17200),
-    ];
+    if (historicalSeries.isEmpty && forecastSeries.isEmpty) {
+      return Container(
+        height: 300,
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: const Center(
+          child: Text(
+            'No data available for the selected range yet.',
+            style: AppConstants.bodyMedium,
+          ),
+        ),
+      );
+    }
 
-    final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final comparisonLength = math.max(
+      historicalSeries.length,
+      forecastSeries.length,
+    );
+    final dateFormatter = DateFormat('MMMd');
+    final labels = <String>[];
+    for (var i = 0; i < comparisonLength; i++) {
+      if (i < historicalSeries.length) {
+        labels.add(dateFormatter.format(historicalSeries[i].date));
+      } else if (i < forecastSeries.length) {
+        labels.add(dateFormatter.format(forecastSeries[i].date));
+      } else {
+        labels.add('Day ${i + 1}');
+      }
+    }
+
+    final historicalSpots = <FlSpot>[];
+    for (var i = 0; i < historicalSeries.length; i++) {
+      historicalSpots.add(FlSpot(i.toDouble(), historicalSeries[i].revenue));
+    }
+
+    final forecastSpots = <FlSpot>[];
+    for (var i = 0; i < forecastSeries.length; i++) {
+      forecastSpots.add(FlSpot(i.toDouble(), forecastSeries[i].revenue));
+    }
+
+    final combinedValues = <double>[
+      ...historicalSeries.map((point) => point.revenue),
+      ...forecastSeries.map((point) => point.revenue),
+    ];
+    final rawMax = combinedValues.isEmpty
+        ? 0
+        : combinedValues.reduce(math.max);
+    final maxY = rawMax <= 0 ? 1000.0 : _niceCeiling(rawMax * 1.1);
+    final yInterval = _computeYAxisInterval(maxY);
+    final bottomInterval = comparisonLength <= 1
+        ? 1
+        : math.max(1, (comparisonLength / 6).ceil());
+
+    final chartLines = <LineChartBarData>[];
+    if (historicalSpots.isNotEmpty) {
+      chartLines.add(
+        LineChartBarData(
+          spots: _sanitizeSpots(historicalSpots),
+          isCurved: true,
+          preventCurveOverShooting: true,
+          curveSmoothness: 0.15,
+          color: AppConstants.successGreen,
+          barWidth: 3,
+          dotData: FlDotData(show: true),
+          belowBarData: BarAreaData(
+            show: true,
+            color: AppConstants.successGreen.withOpacity(0.1),
+          ),
+        ),
+      );
+    }
+    if (forecastSpots.isNotEmpty) {
+      chartLines.add(
+        LineChartBarData(
+          spots: _sanitizeSpots(forecastSpots),
+          isCurved: true,
+          preventCurveOverShooting: true,
+          curveSmoothness: 0.15,
+          color: AppConstants.primaryOrange,
+          barWidth: 3,
+          dotData: FlDotData(show: true),
+          dashArray: const [5, 5],
+          belowBarData: BarAreaData(
+            show: true,
+            color: AppConstants.primaryOrange.withOpacity(0.1),
+          ),
+        ),
+      );
+    }
+
+    final coverageLabel = summary.forecastCoveragePartial
+        ? 'Forecast covers ${summary.selectedDays - summary.forecastCoverageShortfall} of ${summary.selectedDays} selected day(s). Extend the AI window for full coverage.'
+        : null;
 
     return Container(
       height: 300,
@@ -3863,6 +4063,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       ),
       child: Column(
         children: [
+          if (coverageLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(
+                bottom: AppConstants.paddingSmall,
+              ),
+              child: Text(
+                coverageLabel,
+                style: AppConstants.bodySmall.copyWith(
+                  color: AppConstants.warningYellow,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
           // Legend
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -3912,13 +4125,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           Expanded(
             child: LineChart(
               LineChartData(
-                maxY: 18000,
+                maxY: maxY,
                 minY: 0,
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: true,
-                  horizontalInterval: 2000,
-                  verticalInterval: 1,
+                  horizontalInterval: yInterval,
+                  verticalInterval: bottomInterval.toDouble(),
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
                       color: AppConstants.dividerColor.withOpacity(0.3),
@@ -3943,13 +4156,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     sideTitles: SideTitles(
                       showTitles: true,
                       reservedSize: 50,
-                      interval: 2000,
+                      interval: yInterval,
                       getTitlesWidget: (value, meta) {
                         if (value == 0) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(
-                            '₱${(value / 1000).toStringAsFixed(0)}K',
+                            Formatters.formatCurrencyNoCents(value),
                             style: AppConstants.bodySmall.copyWith(
                               fontSize: 10,
                             ),
@@ -3962,54 +4175,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: 1,
+                      interval: bottomInterval.toDouble(),
                       getTitlesWidget: (value, meta) {
-                        if (value.toInt() < labels.length) {
-                          return Text(
-                            labels[value.toInt()],
-                            style: AppConstants.bodySmall.copyWith(
-                              fontSize: 10,
+                        final index = value.round();
+                        if (index >= 0 && index < labels.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              labels[index],
+                              style: AppConstants.bodySmall.copyWith(
+                                fontSize: 10,
+                              ),
                             ),
                           );
                         }
-                        return const Text('');
+                        return const SizedBox.shrink();
                       },
                     ),
                   ),
                 ),
                 borderData: FlBorderData(show: false),
                 clipData: FlClipData.all(),
-                lineBarsData: [
-                  // Historical line
-                  LineChartBarData(
-                    spots: _sanitizeSpots(historicalSpots),
-                    isCurved: true,
-                    preventCurveOverShooting: true,
-                    curveSmoothness: 0.15,
-                    color: AppConstants.successGreen,
-                    barWidth: 3,
-                    dotData: FlDotData(show: true),
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppConstants.successGreen.withOpacity(0.1),
-                    ),
-                  ),
-                  // Forecast line
-                  LineChartBarData(
-                    spots: _sanitizeSpots(forecastSpots),
-                    isCurved: true,
-                    preventCurveOverShooting: true,
-                    curveSmoothness: 0.15,
-                    color: AppConstants.primaryOrange,
-                    barWidth: 3,
-                    dotData: FlDotData(show: true),
-                    dashArray: [5, 5],
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: AppConstants.primaryOrange.withOpacity(0.1),
-                    ),
-                  ),
-                ],
+                lineBarsData: chartLines,
               ),
             ),
           ),
@@ -4020,43 +4207,98 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Category Comparison
   Widget _buildCategoryComparison() {
-    final categories = [
-      {
-        'name': 'Main Course',
-        'historical': 280,
-        'forecast': 340,
-        'color': AppConstants.primaryOrange,
-        'icon': Icons.restaurant,
-      },
-      {
-        'name': 'Beverages',
-        'historical': 178,
-        'forecast': 210,
-        'color': Colors.blue,
-        'icon': Icons.local_cafe,
-      },
-      {
-        'name': 'Appetizers',
-        'historical': 105,
-        'forecast': 120,
-        'color': AppConstants.successGreen,
-        'icon': Icons.fastfood,
-      },
-      {
-        'name': 'Desserts',
-        'historical': 78,
-        'forecast': 85,
-        'color': Colors.pink,
-        'icon': Icons.cake,
-      },
-      {
-        'name': 'Sides',
-        'historical': 72,
-        'forecast': 65,
-        'color': AppConstants.warningYellow,
-        'icon': Icons.food_bank,
-      },
+    final historicalLookup = <String, _CategoryBreakdown>{
+      for (final category in _categoryBreakdown)
+        category.name.toLowerCase().trim(): category,
+    };
+    final forecastLookup = <String, CategoryDemandProjection>{
+      for (final projection in _forecastCategoryDemand)
+        projection.name.toLowerCase().trim(): projection,
+    };
+    final categoryKeys = <String>{
+      ...historicalLookup.keys,
+      ...forecastLookup.keys,
+    };
+
+    if (categoryKeys.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: const Center(
+          child: Text(
+            'No category data available for this range.',
+            style: AppConstants.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    final rows = categoryKeys.map((key) {
+      final historical = historicalLookup[key];
+      final forecast = forecastLookup[key];
+      final displayName = forecast?.name ?? historical?.name ?? key;
+      final historicalOrders = historical?.quantity ?? 0;
+      final forecastOrders = forecast?.predictedOrders ?? 0;
+      final historicalRevenue = historical?.revenue ?? 0;
+
+      double? changePercent;
+      if (forecast?.changePercent != null) {
+        changePercent = forecast!.changePercent;
+      } else if (historicalOrders == 0 && forecastOrders > 0) {
+        changePercent = double.nan;
+      } else if (historicalOrders > 0) {
+        changePercent =
+            ((forecastOrders - historicalOrders) / historicalOrders) * 100;
+      }
+
+      return _CategoryComparisonRow(
+        name: displayName,
+        historicalOrders: historicalOrders,
+        forecastOrders: forecastOrders,
+        historicalRevenue: historicalRevenue,
+        changePercent: changePercent,
+      );
+    }).toList()
+      ..sort((a, b) => b.forecastOrders.compareTo(a.forecastOrders));
+
+    final palette = <Color>[
+      AppConstants.primaryOrange,
+      Colors.blue,
+      AppConstants.successGreen,
+      Colors.pink,
+      AppConstants.warningYellow,
+      Colors.purple,
+      Colors.teal,
     ];
+
+    IconData iconForCategory(String name) {
+      final lower = name.toLowerCase();
+      if (lower.contains('drink') || lower.contains('bev')) {
+        return Icons.local_cafe;
+      }
+      if (lower.contains('dessert') || lower.contains('sweet')) {
+        return Icons.cake;
+      }
+      if (lower.contains('app') || lower.contains('starter')) {
+        return Icons.fastfood;
+      }
+      if (lower.contains('side')) {
+        return Icons.food_bank;
+      }
+      return Icons.restaurant;
+    }
+
+    final maxOrders = rows.fold<int>(
+      1,
+      (maxValue, row) => math.max(
+        maxValue,
+        math.max(row.historicalOrders, row.forecastOrders),
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -4066,11 +4308,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         border: Border.all(color: AppConstants.dividerColor, width: 1),
       ),
       child: Column(
-        children: categories.map((category) {
-          final historical = category['historical'] as int;
-          final forecast = category['forecast'] as int;
-          final change = ((forecast - historical) / historical * 100);
-          final isIncrease = change > 0;
+        children: rows.asMap().entries.map((entry) {
+          final index = entry.key;
+          final row = entry.value;
+          final color = palette[index % palette.length];
+          final changeLabel = _formatDelta(row.changePercent) ?? '—';
+          final isIncrease =
+              row.changePercent == null || row.changePercent!.isNaN
+                  ? true
+                  : row.changePercent! >= 0;
+          final historicalProgress = maxOrders <= 0
+              ? 0.0
+              : row.historicalOrders / maxOrders;
+          final forecastProgress = maxOrders <= 0
+              ? 0.0
+              : row.forecastOrders / maxOrders;
 
           return Padding(
             padding: const EdgeInsets.only(bottom: AppConstants.paddingMedium),
@@ -4082,19 +4334,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: (category['color'] as Color).withOpacity(0.2),
+                        color: color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        category['icon'] as IconData,
-                        color: category['color'] as Color,
+                        iconForCategory(row.name),
+                        color: color,
                         size: 20,
                       ),
                     ),
                     const SizedBox(width: AppConstants.paddingSmall),
                     Expanded(
                       child: Text(
-                        category['name'] as String,
+                        row.name,
                         style: AppConstants.bodyLarge.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -4106,33 +4358,44 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color:
-                            (isIncrease
-                                    ? AppConstants.successGreen
-                                    : Colors.red)
-                                .withOpacity(0.2),
+                        color: (isIncrease
+                                ? AppConstants.successGreen
+                                : Colors.red)
+                            .withOpacity(0.2),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            isIncrease
-                                ? Icons.arrow_upward
-                                : Icons.arrow_downward,
-                            color: isIncrease
-                                ? AppConstants.successGreen
-                                : Colors.red,
+                            row.changePercent == null ||
+                                    row.changePercent!.abs() < 0.05
+                                ? Icons.remove
+                                : isIncrease
+                                    ? Icons.arrow_upward
+                                    : Icons.arrow_downward,
+                            color: row.changePercent == null ||
+                                    row.changePercent!.abs() < 0.05
+                                ? AppConstants.textSecondary
+                                : isIncrease
+                                    ? AppConstants.successGreen
+                                    : Colors.red,
                             size: 12,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${change.abs().toStringAsFixed(0)}%',
+                            changeLabel,
                             style: AppConstants.bodySmall.copyWith(
-                              color: isIncrease
-                                  ? AppConstants.successGreen
-                                  : Colors.red,
-                              fontWeight: FontWeight.bold,
+                              color: row.changePercent == null ||
+                                      row.changePercent!.abs() < 0.05
+                                  ? AppConstants.textSecondary
+                                  : isIncrease
+                                      ? AppConstants.successGreen
+                                      : Colors.red,
+                              fontWeight: row.changePercent == null ||
+                                      row.changePercent!.abs() < 0.05
+                                  ? FontWeight.normal
+                                  : FontWeight.bold,
                             ),
                           ),
                         ],
@@ -4148,7 +4411,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Historical: $historical orders',
+                            'Historical: ${row.historicalOrders} orders',
                             style: AppConstants.bodySmall.copyWith(
                               color: AppConstants.textSecondary,
                             ),
@@ -4157,7 +4420,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
-                              value: historical / 340,
+                              value: historicalProgress.clamp(0.0, 1.0),
                               minHeight: 6,
                               backgroundColor: AppConstants.dividerColor,
                               valueColor: AlwaysStoppedAnimation<Color>(
@@ -4174,7 +4437,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Forecast: $forecast orders',
+                            'Forecast: ${row.forecastOrders} orders',
                             style: AppConstants.bodySmall.copyWith(
                               color: AppConstants.primaryOrange,
                             ),
@@ -4183,11 +4446,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(4),
                             child: LinearProgressIndicator(
-                              value: forecast / 340,
+                              value: forecastProgress.clamp(0.0, 1.0),
                               minHeight: 6,
                               backgroundColor: AppConstants.dividerColor,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                category['color'] as Color,
+                                color,
                               ),
                             ),
                           ),
@@ -4206,35 +4469,109 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Channel Comparison
   Widget _buildChannelComparison() {
-    final channels = [
-      {
-        'name': 'Dine-In',
-        'historical': 470,
-        'forecast': 540,
-        'historicalPct': 65,
-        'forecastPct': 65,
-        'color': AppConstants.primaryOrange,
-        'icon': Icons.restaurant_menu,
-      },
-      {
-        'name': 'Takeout',
-        'historical': 181,
-        'forecast': 208,
-        'historicalPct': 25,
-        'forecastPct': 25,
-        'color': Colors.blue,
-        'icon': Icons.shopping_bag,
-      },
-      {
-        'name': 'Delivery',
-        'historical': 74,
-        'forecast': 83,
-        'historicalPct': 10,
-        'forecastPct': 10,
-        'color': AppConstants.successGreen,
-        'icon': Icons.delivery_dining,
-      },
+    final historicalLookup = <String, _ChannelBreakdown>{
+      for (final channel in _channelBreakdown)
+        channel.name.toLowerCase().trim(): channel,
+    };
+    final forecastLookup = <String, ChannelDemandProjection>{
+      for (final projection in _forecastChannelDemand)
+        projection.name.toLowerCase().trim(): projection,
+    };
+    final channelKeys = <String>{
+      ...historicalLookup.keys,
+      ...forecastLookup.keys,
+    };
+
+    if (channelKeys.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(AppConstants.paddingMedium),
+        decoration: BoxDecoration(
+          color: AppConstants.cardBackground,
+          borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
+        ),
+        child: const Center(
+          child: Text(
+            'No channel data available for this range.',
+            style: AppConstants.bodyMedium,
+          ),
+        ),
+      );
+    }
+
+    final rows = channelKeys.map((key) {
+      final historical = historicalLookup[key];
+      final forecast = forecastLookup[key];
+      final displayName = forecast?.name ?? historical?.name ?? key;
+      final historicalOrders = historical?.orders ?? 0;
+      final forecastOrders = forecast?.predictedOrders ?? 0;
+      final historicalShare = historical?.share ?? 0;
+      final forecastShare = forecast?.revenueShare ??
+          (forecastOrders <= 0
+              ? 0
+              : forecastOrders /
+                  math.max(1, _forecastChannelDemand
+                      .fold<int>(0, (sum, item) => sum + item.predictedOrders)));
+      double? changePercent;
+      if (forecast?.changePercent != null) {
+        changePercent = forecast!.changePercent;
+      } else if (historicalOrders == 0 && forecastOrders > 0) {
+        changePercent = double.nan;
+      } else if (historicalOrders > 0) {
+        changePercent =
+            ((forecastOrders - historicalOrders) / historicalOrders) * 100;
+      }
+
+      return _ChannelComparisonRow(
+        name: displayName,
+        historicalOrders: historicalOrders,
+        historicalShare: historicalShare.clamp(0.0, 1.0),
+        forecastOrders: forecastOrders,
+        forecastShare: forecastShare.clamp(0.0, 1.0),
+        changePercent: changePercent,
+        icon: _channelIcon(displayName),
+        historicalPeak: historical?.peakLabel,
+        forecastPeak: forecast?.peakLabel,
+      );
+    }).toList()
+      ..sort((a, b) => b.forecastOrders.compareTo(a.forecastOrders));
+
+    final palette = <Color>[
+      AppConstants.primaryOrange,
+      Colors.blue,
+      AppConstants.successGreen,
+      Colors.purple,
+      Colors.teal,
     ];
+
+    int shareFlex(double share) => math.max(1, (share * 1000).round());
+    String shareLabel(double share) => '${(share * 100).round()}%';
+
+    final totalHistoricalOrders = rows.fold<int>(
+      0,
+      (sum, row) => sum + row.historicalOrders,
+    );
+    final totalForecastOrders = rows.fold<int>(
+      0,
+      (sum, row) => sum + row.forecastOrders,
+    );
+
+    final totalHistoricalShare = rows.fold<double>(
+      0,
+      (sum, row) => sum + row.historicalShare,
+    );
+    final totalForecastShare = rows.fold<double>(
+      0,
+      (sum, row) => sum + row.forecastShare,
+    );
+
+    final maxChannelOrders = rows.fold<int>(
+      1,
+      (maxValue, row) => math.max(
+        maxValue,
+        math.max(row.historicalOrders, row.forecastOrders),
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.all(AppConstants.paddingMedium),
@@ -4257,34 +4594,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               ),
               const SizedBox(height: 8),
               Row(
-                children: channels.map((channel) {
-                  final isFirst = channel == channels.first;
-                  final isLast = channel == channels.last;
-
+                children: rows.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final row = entry.value;
+                  final color = palette[index % palette.length];
+                  final isFirst = index == 0;
+                  final isLast = index == rows.length - 1;
+                    final rawShare = row.historicalShare > 0
+                      ? row.historicalShare
+                      : (totalHistoricalOrders <= 0
+                        ? 0.0
+                        : row.historicalOrders / totalHistoricalOrders);
+                    final share = totalHistoricalShare <= 0
+                      ? rawShare
+                      : rawShare / totalHistoricalShare;
                   return Expanded(
-                    flex: channel['historicalPct'] as int,
+                    flex: shareFlex(share),
                     child: Container(
                       height: 30,
                       decoration: BoxDecoration(
-                        color: (channel['color'] as Color).withOpacity(0.5),
+                        color: color.withOpacity(0.5),
                         borderRadius: BorderRadius.only(
-                          topLeft: isFirst
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          bottomLeft: isFirst
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          topRight: isLast
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          bottomRight: isLast
-                              ? const Radius.circular(6)
-                              : Radius.zero,
+                          topLeft:
+                              isFirst ? const Radius.circular(6) : Radius.zero,
+                          bottomLeft:
+                              isFirst ? const Radius.circular(6) : Radius.zero,
+                          topRight:
+                              isLast ? const Radius.circular(6) : Radius.zero,
+                          bottomRight:
+                              isLast ? const Radius.circular(6) : Radius.zero,
                         ),
                       ),
                       child: Center(
                         child: Text(
-                          '${channel['historicalPct']}%',
+                          shareLabel(rawShare.clamp(0, 1).toDouble()),
                           style: AppConstants.bodySmall.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -4312,34 +4655,40 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               ),
               const SizedBox(height: 8),
               Row(
-                children: channels.map((channel) {
-                  final isFirst = channel == channels.first;
-                  final isLast = channel == channels.last;
-
+                children: rows.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final row = entry.value;
+                  final color = palette[index % palette.length];
+                  final isFirst = index == 0;
+                  final isLast = index == rows.length - 1;
+                    final rawShare = row.forecastShare > 0
+                      ? row.forecastShare
+                      : (totalForecastOrders <= 0
+                        ? 0.0
+                        : row.forecastOrders / totalForecastOrders);
+                    final share = totalForecastShare <= 0
+                      ? rawShare
+                      : rawShare / totalForecastShare;
                   return Expanded(
-                    flex: channel['forecastPct'] as int,
+                    flex: shareFlex(share),
                     child: Container(
                       height: 30,
                       decoration: BoxDecoration(
-                        color: channel['color'] as Color,
+                        color: color,
                         borderRadius: BorderRadius.only(
-                          topLeft: isFirst
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          bottomLeft: isFirst
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          topRight: isLast
-                              ? const Radius.circular(6)
-                              : Radius.zero,
-                          bottomRight: isLast
-                              ? const Radius.circular(6)
-                              : Radius.zero,
+                          topLeft:
+                              isFirst ? const Radius.circular(6) : Radius.zero,
+                          bottomLeft:
+                              isFirst ? const Radius.circular(6) : Radius.zero,
+                          topRight:
+                              isLast ? const Radius.circular(6) : Radius.zero,
+                          bottomRight:
+                              isLast ? const Radius.circular(6) : Radius.zero,
                         ),
                       ),
                       child: Center(
                         child: Text(
-                          '${channel['forecastPct']}%',
+                          shareLabel(rawShare.clamp(0, 1).toDouble()),
                           style: AppConstants.bodySmall.copyWith(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -4356,10 +4705,21 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           const SizedBox(height: AppConstants.paddingLarge),
 
           // Channel details
-          ...channels.map((channel) {
-            final historical = channel['historical'] as int;
-            final forecast = channel['forecast'] as int;
-            final change = ((forecast - historical) / historical * 100);
+          ...rows.asMap().entries.map((entry) {
+            final index = entry.key;
+            final row = entry.value;
+            final color = palette[index % palette.length];
+            final changeLabel = _formatDelta(row.changePercent) ?? '—';
+            final isIncrease =
+                row.changePercent == null || row.changePercent!.isNaN
+                    ? true
+                    : row.changePercent! >= 0;
+            final historicalProgress = maxChannelOrders <= 0
+                ? 0.0
+                : row.historicalOrders / maxChannelOrders;
+            final forecastProgress = maxChannelOrders <= 0
+                ? 0.0
+                : row.forecastOrders / maxChannelOrders;
 
             return Container(
               margin: const EdgeInsets.only(bottom: AppConstants.paddingSmall),
@@ -4368,41 +4728,128 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 color: AppConstants.darkSecondary,
                 borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
                 border: Border.all(
-                  color: (channel['color'] as Color).withOpacity(0.3),
+                  color: color.withOpacity(0.3),
                   width: 1,
                 ),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    channel['icon'] as IconData,
-                    color: channel['color'] as Color,
-                    size: 20,
-                  ),
-                  const SizedBox(width: AppConstants.paddingSmall),
-                  Expanded(
-                    child: Text(
-                      channel['name'] as String,
-                      style: AppConstants.bodyMedium.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  Row(
                     children: [
-                      Text(
-                        '$historical → $forecast orders',
-                        style: AppConstants.bodySmall.copyWith(
-                          color: AppConstants.textSecondary,
+                      Icon(
+                        row.icon,
+                        color: color,
+                        size: 20,
+                      ),
+                      const SizedBox(width: AppConstants.paddingSmall),
+                      Expanded(
+                        child: Text(
+                          row.name,
+                          style: AppConstants.bodyMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '+${change.toStringAsFixed(0)}%',
-                        style: AppConstants.bodySmall.copyWith(
-                          color: AppConstants.successGreen,
-                          fontWeight: FontWeight.bold,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${row.historicalOrders} → ${row.forecastOrders} orders',
+                            style: AppConstants.bodySmall.copyWith(
+                              color: AppConstants.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            changeLabel,
+                            style: AppConstants.bodySmall.copyWith(
+                              color: row.changePercent == null ||
+                                      row.changePercent!.abs() < 0.05
+                                  ? AppConstants.textSecondary
+                                  : isIncrease
+                                      ? AppConstants.successGreen
+                                      : Colors.red,
+                              fontWeight: row.changePercent == null ||
+                                      row.changePercent!.abs() < 0.05
+                                  ? FontWeight.normal
+                                  : FontWeight.bold,
+                            ),
+                          ),
+                          if (row.historicalPeak != null ||
+                              row.forecastPeak != null)
+                            Text(
+                              [
+                                if (row.historicalPeak != null)
+                                  'Hist: ${row.historicalPeak}',
+                                if (row.forecastPeak != null)
+                                  'Forecast: ${row.forecastPeak}',
+                              ].join(' • '),
+                              style: AppConstants.bodySmall.copyWith(
+                                color: AppConstants.textSecondary,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppConstants.paddingSmall),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Historical share: ${shareLabel(row.historicalShare)}',
+                              style: AppConstants.bodySmall.copyWith(
+                                color: AppConstants.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: historicalProgress
+                                    .clamp(0.0, 1.0)
+                                    .toDouble(),
+                                minHeight: 6,
+                                backgroundColor: AppConstants.dividerColor,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  AppConstants.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppConstants.paddingMedium),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Forecast share: ${shareLabel(row.forecastShare)}',
+                              style: AppConstants.bodySmall.copyWith(
+                                color: AppConstants.primaryOrange,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: forecastProgress
+                                    .clamp(0.0, 1.0)
+                                    .toDouble(),
+                                minHeight: 6,
+                                backgroundColor: AppConstants.dividerColor,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  color,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -4418,36 +4865,139 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
   /// Comparison Insights
   Widget _buildComparisonInsights() {
-    final insights = [
-      {
-        'icon': Icons.trending_up,
-        'color': AppConstants.successGreen,
-        'title': 'Strong Growth Projection',
-        'description':
-            'Revenue forecast shows a 29.2% increase, driven by upcoming events and weather patterns.',
-      },
-      {
-        'icon': Icons.restaurant,
-        'color': AppConstants.primaryOrange,
-        'title': 'Main Course Surge',
-        'description':
-            'Main Course category expected to grow by 21%, suggesting increased demand for full meals.',
-      },
-      {
-        'icon': Icons.delivery_dining,
-        'color': Colors.blue,
-        'title': 'Channel Consistency',
-        'description':
-            'Order channel distribution remains stable at 65-25-10, with growth across all channels.',
-      },
-      {
-        'icon': Icons.lightbulb_outline,
-        'color': AppConstants.warningYellow,
-        'title': 'Recommended Actions',
-        'description':
-            'Stock up on Pasta ingredients. Add 2 servers for peak hours. Promote comfort food during rainy days.',
-      },
-    ];
+    final summary = _buildComparisonSummary();
+    final revenueDelta = _percentChange(
+      summary.forecastRevenue,
+      summary.historicalRevenue,
+    );
+    final ordersDelta = _percentChange(
+      summary.forecastOrders.toDouble(),
+      summary.historicalOrders.toDouble(),
+    );
+
+    final categoryLeader = _forecastCategoryDemand
+        .where((category) => !category.changePercent.isNaN)
+        .fold<CategoryDemandProjection?>(
+          null,
+          (current, candidate) => current == null ||
+                  candidate.changePercent > current.changePercent
+              ? candidate
+              : current,
+        );
+
+    final channelLeader = _forecastChannelDemand
+        .where((channel) => channel.changePercent != null)
+        .fold<ChannelDemandProjection?>(
+          null,
+          (current, candidate) => current == null ||
+                  (candidate.changePercent ?? 0) >
+                      (current.changePercent ?? 0)
+              ? candidate
+              : current,
+        );
+
+    final decliningCategory = _forecastCategoryDemand
+        .where((category) => !category.changePercent.isNaN)
+        .fold<CategoryDemandProjection?>(
+          null,
+          (current, candidate) => current == null ||
+                  candidate.changePercent < current.changePercent
+              ? candidate
+              : current,
+        );
+
+    final insights = <_InsightCardData>[];
+
+    if (revenueDelta != null) {
+      final revenueLabel = _formatDelta(revenueDelta) ?? '—';
+      insights.add(
+        _InsightCardData(
+          icon: Icons.trending_up,
+          color: AppConstants.successGreen,
+          title: 'Revenue Outlook',
+          description:
+              'Forecast revenue is $revenueLabel versus ${Formatters.formatCurrency(summary.historicalRevenue)} historically. Projected total: ${Formatters.formatCurrency(summary.forecastRevenue)}.',
+        ),
+      );
+    }
+
+    if (ordersDelta != null) {
+      final ordersLabel = _formatDelta(ordersDelta) ?? '—';
+      insights.add(
+        _InsightCardData(
+          icon: Icons.receipt_long,
+          color: AppConstants.primaryOrange,
+          title: 'Order Volume',
+          description:
+              'Orders are tracking $ordersLabel with ${summary.forecastOrders} projected vs ${summary.historicalOrders} historically.',
+        ),
+      );
+    }
+
+    if (categoryLeader != null) {
+      final changeLabel = _formatDelta(categoryLeader.changePercent) ?? '—';
+      insights.add(
+        _InsightCardData(
+          icon: Icons.restaurant,
+          color: AppConstants.primaryOrange,
+          title: '${categoryLeader.name} Momentum',
+          description:
+              '${categoryLeader.name} is forecast at ${categoryLeader.predictedOrders} orders ($changeLabel) compared to ${categoryLeader.historicalOrders} historically.',
+        ),
+      );
+    }
+
+    if (decliningCategory != null && decliningCategory.changePercent < 0) {
+      final changeLabel = _formatDelta(decliningCategory.changePercent) ?? '—';
+      insights.add(
+        _InsightCardData(
+          icon: Icons.warning_amber,
+          color: Colors.redAccent,
+          title: '${decliningCategory.name} Softening',
+          description:
+              '${decliningCategory.name} may ease to ${decliningCategory.predictedOrders} orders ($changeLabel). Consider promos to maintain traction.',
+        ),
+      );
+    }
+
+    if (channelLeader != null) {
+      final changeLabel =
+          _formatDelta(channelLeader.changePercent ?? double.nan) ?? '—';
+      insights.add(
+        _InsightCardData(
+          icon: channelLeader.name.toLowerCase().contains('delivery')
+              ? Icons.delivery_dining
+              : Icons.storefront,
+          color: Colors.blue,
+          title: '${channelLeader.name} Opportunities',
+          description:
+              '${channelLeader.name} is forecasting ${channelLeader.predictedOrders} orders ($changeLabel). Peak window: ${channelLeader.peakLabel ?? 'TBD'}.',
+        ),
+      );
+    }
+
+    if (_forecastAction != null) {
+      insights.add(
+        _InsightCardData(
+          icon: Icons.lightbulb_outline,
+          color: AppConstants.warningYellow,
+          title: _forecastAction!.title,
+          description: _forecastAction!.subtitle,
+        ),
+      );
+    }
+
+    if (insights.isEmpty) {
+      insights.add(
+        const _InsightCardData(
+          icon: Icons.info_outline,
+          color: AppConstants.textSecondary,
+          title: 'No forecast highlights yet',
+          description:
+              'Select a different range or refresh data to surface meaningful insights.',
+        ),
+      );
+    }
 
     return Column(
       children: insights.map((insight) {
@@ -4458,7 +5008,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             color: AppConstants.cardBackground,
             borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
             border: Border.all(
-              color: (insight['color'] as Color).withOpacity(0.3),
+              color: insight.color.withOpacity(0.3),
               width: 1,
             ),
           ),
@@ -4468,12 +5018,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (insight['color'] as Color).withOpacity(0.2),
+                  color: insight.color.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  insight['icon'] as IconData,
-                  color: insight['color'] as Color,
+                  insight.icon,
+                  color: insight.color,
                   size: 20,
                 ),
               ),
@@ -4483,14 +5033,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      insight['title'] as String,
+                      insight.title,
                       style: AppConstants.bodyLarge.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      insight['description'] as String,
+                      insight.description,
                       style: AppConstants.bodySmall.copyWith(
                         color: AppConstants.textSecondary,
                       ),
@@ -4538,9 +5088,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
     if (picked != null) {
       setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
+        _startDate = _dateOnly(picked.start);
+        _endDate = _dateOnly(picked.end);
       });
+      await _loadAnalyticsData();
     }
   }
 
@@ -4566,9 +5117,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
 
     if (picked != null) {
       setState(() {
-        _startDate = picked;
+        final day = _dateOnly(picked);
+        _startDate = day;
         _endDate = null;
       });
+      await _loadAnalyticsData();
     }
   }
 
@@ -4578,6 +5131,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
       _startDate = null;
       _endDate = null;
     });
+    _loadAnalyticsData();
   }
 
   /// Load analytics data
@@ -5006,9 +5560,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     final range = _resolveActiveDateRange();
     final filtered = <TransactionRecord>[];
     final previous = <TransactionRecord>[];
+    final allDailyTotals = <DateTime, double>{};
 
     for (final record in allTransactions) {
       final day = _dateOnly(record.timestamp);
+      allDailyTotals[day] = (allDailyTotals[day] ?? 0) + record.saleAmount;
       if (!day.isBefore(range.start) && !day.isAfter(range.end)) {
         filtered.add(record);
       } else if (!day.isBefore(range.previousStart) &&
@@ -5052,13 +5608,36 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     }
 
     final dailyPoints = <_DailyRevenuePoint>[];
-    double maxDailyRevenue = 0;
     for (var i = 0; i < range.lengthInDays; i++) {
       final day = _dateOnly(range.start.add(Duration(days: i)));
       final revenue = dailyTotals[day] ?? 0;
-      maxDailyRevenue = math.max(maxDailyRevenue, revenue);
       dailyPoints.add(_DailyRevenuePoint(date: day, revenue: revenue));
     }
+
+    if (dailyPoints.length == 1) {
+      final baseDay = dailyPoints.first.date;
+      final today = _dateOnly(DateTime.now());
+
+      final days = baseDay.isAtSameMomentAs(today)
+          ? List<DateTime>.generate(7, (index) => baseDay.subtract(Duration(days: 6 - index)))
+          : List<DateTime>.generate(7, (index) => baseDay.add(Duration(days: index - 3)));
+
+      dailyPoints
+        ..clear()
+        ..addAll(
+          days.map(
+            (day) => _DailyRevenuePoint(
+              date: day,
+              revenue: allDailyTotals[day] ?? 0,
+            ),
+          ),
+        );
+    }
+
+    final double maxDailyRevenue = dailyPoints.fold<double>(
+      0,
+      (maxValue, point) => math.max(maxValue, point.revenue),
+    );
 
     final salesTrendMaxY = maxDailyRevenue <= 0
         ? 0.0
@@ -5292,12 +5871,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   }
 
   _ResolvedDateRange _resolveActiveDateRange() {
-    final today = DateTime.now();
-    DateTime start = _startDate ?? today.subtract(const Duration(days: 6));
-    DateTime end = _endDate ?? _startDate ?? today;
+    final today = _dateOnly(DateTime.now());
+    DateTime start;
+    DateTime end;
 
-    start = _dateOnly(start);
-    end = _dateOnly(end);
+    if (_startDate == null && _endDate == null) {
+      // Default to today when no manual date filter is applied.
+      start = today;
+      end = today;
+    } else {
+      start = _dateOnly(_startDate ?? today);
+      end = _dateOnly(_endDate ?? _startDate ?? today);
+    }
 
     if (start.isAfter(end)) {
       final temp = start;
@@ -5308,7 +5893,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
     final lengthInDays = end.difference(start).inDays + 1;
     final previousEnd = start.subtract(const Duration(days: 1));
     final previousStart = previousEnd.subtract(
-      Duration(days: lengthInDays - 1),
+      Duration(days: math.max(0, lengthInDays - 1)),
     );
 
     return _ResolvedDateRange(
@@ -5829,6 +6414,88 @@ class _HistoricalAnalyticsSnapshot {
   final String heatmapSummary;
   final double peakHourRevenue;
   final String peakHourWindowLabel;
+}
+
+class _ComparisonSummary {
+  const _ComparisonSummary({
+    required this.selectedDays,
+    required this.historicalRevenue,
+    required this.historicalOrders,
+    required this.historicalAov,
+    required this.forecastRevenue,
+    required this.forecastOrders,
+    required this.forecastAov,
+    required this.historicalSeries,
+    required this.forecastSeries,
+    required this.forecastCoveragePartial,
+    required this.forecastCoverageShortfall,
+  });
+
+  final int selectedDays;
+  final double historicalRevenue;
+  final int historicalOrders;
+  final double historicalAov;
+  final double forecastRevenue;
+  final int forecastOrders;
+  final double forecastAov;
+  final List<_DailyRevenuePoint> historicalSeries;
+  final List<ForecastSeriesPoint> forecastSeries;
+  final bool forecastCoveragePartial;
+  final int forecastCoverageShortfall;
+}
+
+class _CategoryComparisonRow {
+  const _CategoryComparisonRow({
+    required this.name,
+    required this.historicalOrders,
+    required this.forecastOrders,
+    required this.historicalRevenue,
+    required this.changePercent,
+  });
+
+  final String name;
+  final int historicalOrders;
+  final int forecastOrders;
+  final double historicalRevenue;
+  final double? changePercent;
+}
+
+class _ChannelComparisonRow {
+  const _ChannelComparisonRow({
+    required this.name,
+    required this.historicalOrders,
+    required this.historicalShare,
+    required this.forecastOrders,
+    required this.forecastShare,
+    required this.changePercent,
+    required this.icon,
+    this.historicalPeak,
+    this.forecastPeak,
+  });
+
+  final String name;
+  final int historicalOrders;
+  final double historicalShare;
+  final int forecastOrders;
+  final double forecastShare;
+  final double? changePercent;
+  final IconData icon;
+  final String? historicalPeak;
+  final String? forecastPeak;
+}
+
+class _InsightCardData {
+  const _InsightCardData({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.description,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String description;
 }
 
 class _DailyRevenuePoint {
