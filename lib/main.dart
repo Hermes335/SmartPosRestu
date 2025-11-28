@@ -101,15 +101,22 @@ class SmartServePOS extends StatelessWidget {
             backgroundColor: AppConstants.primaryOrange,
             foregroundColor: Colors.white,
           ),
-            textTheme: GoogleFonts.fredokaTextTheme(ThemeData.dark().textTheme)
+          textTheme: GoogleFonts.fredokaTextTheme(ThemeData.dark().textTheme)
               .copyWith(
-            headlineLarge: AppConstants.headingLarge,
-            headlineMedium: AppConstants.headingMedium,
-            headlineSmall: AppConstants.headingSmall,
-            bodyLarge: AppConstants.bodyLarge,
-            bodyMedium: AppConstants.bodyMedium,
-            bodySmall: AppConstants.bodySmall,
-          ),
+                headlineLarge: AppConstants.headingLarge,
+                headlineMedium: AppConstants.headingMedium,
+                headlineSmall: AppConstants.headingSmall,
+                bodyLarge: AppConstants.bodyLarge,
+                bodyMedium: AppConstants.bodyMedium,
+                bodySmall: AppConstants.bodySmall,
+              )
+              .apply(
+                fontFamilyFallback: const [
+                  'Roboto',
+                  'Noto Sans',
+                  'Noto Sans Symbols',
+                ],
+              ),
         ),
         home: const AuthWrapper(),
       ),

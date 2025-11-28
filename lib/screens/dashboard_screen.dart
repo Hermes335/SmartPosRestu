@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../services/transaction_service.dart';
 import '../utils/constants.dart';
+import '../utils/currency_text.dart';
 import '../utils/formatters.dart';
 import '../widgets/stat_card.dart';
 
@@ -70,7 +71,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         leading: IconButton(
           icon: const Icon(Icons.menu),
           onPressed: () {
-            final scaffoldState = context.findAncestorStateOfType<ScaffoldState>();
+            final scaffoldState = context
+                .findAncestorStateOfType<ScaffoldState>();
             if (scaffoldState != null) {
               scaffoldState.openDrawer();
             }
@@ -78,15 +80,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: Row(
           children: [
-            Icon(
-              Icons.dashboard,
-              color: AppConstants.primaryOrange,
-            ),
+            Icon(Icons.dashboard, color: AppConstants.primaryOrange),
             const SizedBox(width: AppConstants.paddingSmall),
-            const Text(
-              'Dashboard',
-              style: AppConstants.headingMedium,
-            ),
+            const Text('Dashboard', style: AppConstants.headingMedium),
           ],
         ),
         actions: [
@@ -131,10 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Icon(Icons.error_outline, color: AppConstants.errorRed, size: 48),
           const SizedBox(height: AppConstants.paddingMedium),
-          Text(
-            _error!,
-            style: AppConstants.bodyLarge,
-          ),
+          Text(_error!, style: AppConstants.bodyLarge),
           const SizedBox(height: AppConstants.paddingMedium),
           ElevatedButton.icon(
             onPressed: _loadDashboardData,
@@ -153,10 +146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           _buildWelcomeSection(),
           const SizedBox(height: AppConstants.paddingLarge),
-          const Text(
-            'Today\'s Overview',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Today\'s Overview', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildMetricsGrid(),
           const SizedBox(height: AppConstants.paddingLarge),
@@ -169,10 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: AppConstants.paddingMedium),
           _buildAIRecommendations(),
           const SizedBox(height: AppConstants.paddingLarge),
-          const Text(
-            'Top Selling Items',
-            style: AppConstants.headingSmall,
-          ),
+          const Text('Top Selling Items', style: AppConstants.headingSmall),
           const SizedBox(height: AppConstants.paddingMedium),
           _buildTopSellingItems(),
         ],
@@ -210,10 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 4),
           Text(
             Formatters.formatDate(DateTime.now()),
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
+            style: const TextStyle(fontSize: 14, color: Colors.white70),
           ),
         ],
       ),
@@ -281,10 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: AppConstants.cardBackground,
         borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(
-          color: AppConstants.dividerColor,
-          width: 1,
-        ),
+        border: Border.all(color: AppConstants.dividerColor, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,10 +274,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Sales Overview',
-                style: AppConstants.headingSmall,
-              ),
+              const Text('Sales Overview', style: AppConstants.headingSmall),
               // Period toggle buttons
               Container(
                 decoration: BoxDecoration(
@@ -313,10 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: AppConstants.paddingMedium),
           // Chart
-          SizedBox(
-            height: 250,
-            child: _buildSalesChart(),
-          ),
+          SizedBox(height: 250, child: _buildSalesChart()),
         ],
       ),
     );
@@ -337,9 +312,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           vertical: 6,
         ),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppConstants.primaryOrange
-              : Colors.transparent,
+          color: isSelected ? AppConstants.primaryOrange : Colors.transparent,
           borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
         ),
         child: Text(
@@ -368,7 +341,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final double maxY = series.maxY <= 0 ? 100.0 : series.maxY;
-    final double interval = series.interval <= 0 ? _computeYAxisInterval(maxY) : series.interval;
+    final double interval = series.interval <= 0
+        ? _computeYAxisInterval(maxY)
+        : series.interval;
     final labels = series.labels;
     final spots = series.spots;
 
@@ -397,12 +372,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
         titlesData: FlTitlesData(
-          rightTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
-          topTitles: AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
-          ),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -432,14 +403,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final int count = labels.length;
                 if (count == 0) return const SizedBox.shrink();
                 final int maxLabels = 6;
-                final int step = (count <= maxLabels) ? 1 : ( (count / maxLabels).ceil() );
+                final int step = (count <= maxLabels)
+                    ? 1
+                    : ((count / maxLabels).ceil());
                 final int idx = value.toInt();
                 if (idx < 0 || idx >= count) return const SizedBox.shrink();
                 if (idx % step != 0) return const SizedBox.shrink();
-                return Text(
-                  labels[idx],
-                  style: AppConstants.bodySmall,
-                );
+                return Text(labels[idx], style: AppConstants.bodySmall);
               },
             ),
           ),
@@ -468,7 +438,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildAIRecommendations() {
     if (_insights.isEmpty) {
       return const _EmptyDashboardCard(
-        message: 'No insights yet. Keep logging transactions to unlock AI summaries.',
+        message:
+            'No insights yet. Keep logging transactions to unlock AI summaries.',
       );
     }
 
@@ -491,25 +462,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: AppConstants.cardBackground,
         borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-        border: Border.all(
-          color: AppConstants.dividerColor,
-          width: 1,
-        ),
+        border: Border.all(color: AppConstants.dividerColor, width: 1),
       ),
       child: ListView.separated(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         itemCount: _topSellingItems.length,
-        separatorBuilder: (context, index) => Divider(
-          color: AppConstants.dividerColor,
-          height: 1,
-        ),
+        separatorBuilder: (context, index) =>
+            Divider(color: AppConstants.dividerColor, height: 1),
         itemBuilder: (context, index) {
           final item = _topSellingItems[index];
-          return _TopSellerTile(
-            item: item,
-            rank: index + 1,
-          );
+          return _TopSellerTile(item: item, rank: index + 1);
         },
       ),
     );
@@ -540,7 +503,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final monthTxns = <TransactionRecord>[];
 
       for (final txn in transactions) {
-        final day = DateTime(txn.timestamp.year, txn.timestamp.month, txn.timestamp.day);
+        final day = DateTime(
+          txn.timestamp.year,
+          txn.timestamp.month,
+          txn.timestamp.day,
+        );
         if (day == todayStart) {
           todayTxns.add(txn);
         } else if (day == yesterdayStart) {
@@ -560,16 +527,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final yesterdaySales = _sumRevenue(yesterdayTxns);
       final todayOrders = todayTxns.length;
       final yesterdayOrders = yesterdayTxns.length;
-        final todayAov = todayOrders == 0 ? 0.0 : todaySales / todayOrders;
-        final yesterdayAov =
-          yesterdayOrders == 0 ? 0.0 : yesterdaySales / math.max(1, yesterdayOrders);
+      final todayAov = todayOrders == 0 ? 0.0 : todaySales / todayOrders;
+      final yesterdayAov = yesterdayOrders == 0
+          ? 0.0
+          : yesterdaySales / math.max(1, yesterdayOrders);
       final todayCustomers = _uniqueCustomers(todayTxns);
       final yesterdayCustomers = _uniqueCustomers(yesterdayTxns);
 
       final salesChange = _percentChange(todaySales, yesterdaySales);
-      final ordersChange = _percentChange(todayOrders.toDouble(), yesterdayOrders.toDouble());
+      final ordersChange = _percentChange(
+        todayOrders.toDouble(),
+        yesterdayOrders.toDouble(),
+      );
       final aovChange = _percentChange(todayAov, yesterdayAov);
-      final customerChange = _percentChange(todayCustomers.toDouble(), yesterdayCustomers.toDouble());
+      final customerChange = _percentChange(
+        todayCustomers.toDouble(),
+        yesterdayCustomers.toDouble(),
+      );
 
       final chartData = <DashboardPeriod, _ChartSeries>{
         // Timely shows intra-day buckets (previously 'Daily')
@@ -656,7 +630,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (index) => FlSpot(index.toDouble(), bucketTotals[index]),
     );
 
-    final maxValue = bucketTotals.fold<double>(0.0, (prev, value) => value > prev ? value : prev);
+    final maxValue = bucketTotals.fold<double>(
+      0.0,
+      (prev, value) => value > prev ? value : prev,
+    );
     final maxY = _niceCeiling(maxValue * 1.1);
     return _ChartSeries(
       spots: spots,
@@ -666,7 +643,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  _ChartSeries _buildWeeklySeries(List<TransactionRecord> records, DateTime start) {
+  _ChartSeries _buildWeeklySeries(
+    List<TransactionRecord> records,
+    DateTime start,
+  ) {
     final totals = List<double>.filled(7, 0.0);
     for (final txn in records) {
       final dayIndex = txn.timestamp.difference(start).inDays;
@@ -685,7 +665,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (index) => FlSpot(index.toDouble(), totals[index]),
     );
 
-    final maxValue = totals.fold<double>(0.0, (prev, value) => value > prev ? value : prev);
+    final maxValue = totals.fold<double>(
+      0.0,
+      (prev, value) => value > prev ? value : prev,
+    );
     final maxY = _niceCeiling(maxValue * 1.1);
     return _ChartSeries(
       spots: spots,
@@ -695,7 +678,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  _ChartSeries _buildMonthlySeries(List<TransactionRecord> records, DateTime start) {
+  _ChartSeries _buildMonthlySeries(
+    List<TransactionRecord> records,
+    DateTime start,
+  ) {
     final totals = List<double>.filled(4, 0.0);
     for (final txn in records) {
       final dayIndex = txn.timestamp.difference(start).inDays;
@@ -710,7 +696,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       4,
       (index) => FlSpot(index.toDouble(), totals[index]),
     );
-    final maxValue = totals.fold<double>(0.0, (prev, value) => value > prev ? value : prev);
+    final maxValue = totals.fold<double>(
+      0.0,
+      (prev, value) => value > prev ? value : prev,
+    );
     final maxY = _niceCeiling(maxValue * 1.1);
     return _ChartSeries(
       spots: spots,
@@ -733,9 +722,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    final items = accumulator.values
-        .map((builder) => builder.build())
-        .toList()
+    final items = accumulator.values.map((builder) => builder.build()).toList()
       ..sort((a, b) => b.revenue.compareTo(a.revenue));
     if (items.length > 5) {
       return items.sublist(0, 5);
@@ -777,7 +764,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           icon: Icons.inventory_2_outlined,
           color: AppConstants.warningYellow,
           title: 'Prep Reminder',
-          description: 'Top movers today: $highlighted. Verify stock before the next rush.',
+          description:
+              'Top movers today: $highlighted. Verify stock before the next rush.',
         ),
       );
     }
@@ -811,7 +799,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           icon: Icons.info_outline,
           color: AppConstants.textSecondary,
           title: 'No Transactions Yet',
-          description: 'Log at least one sale to unlock personalized recommendations.',
+          description:
+              'Log at least one sale to unlock personalized recommendations.',
         ),
       );
     }
@@ -846,7 +835,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return 100.0;
     }
     final target = maxY / 5;
-    final magnitude = math.pow(10, (math.log(target) / math.ln10).floor()).toDouble();
+    final magnitude = math
+        .pow(10, (math.log(target) / math.ln10).floor())
+        .toDouble();
     final normalized = target / magnitude;
     double niceNormalized;
     if (normalized <= 1) {
@@ -864,7 +855,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// Ensure FlSpots are sorted and valid to prevent visual artifacts.
   List<FlSpot> _sanitizeSpots(List<FlSpot> spots) {
-    final filtered = spots.where((s) => s.x.isFinite && s.y.isFinite && !s.y.isNaN).toList();
+    final filtered = spots
+        .where((s) => s.x.isFinite && s.y.isFinite && !s.y.isNaN)
+        .toList();
     filtered.sort((a, b) => a.x.compareTo(b.x));
     return filtered;
   }
@@ -949,7 +942,8 @@ class _TopSellingItemBuilder {
   int quantity = 0;
   double revenue = 0;
 
-  _TopSellingItem build() => _TopSellingItem(name: name, quantity: quantity, revenue: revenue);
+  _TopSellingItem build() =>
+      _TopSellingItem(name: name, quantity: quantity, revenue: revenue);
 }
 
 class _MetricData {
@@ -1065,16 +1059,10 @@ class _TopSellerTile extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(
-        item.name,
-        style: AppConstants.bodyLarge,
-      ),
-      subtitle: Text(
-        '${item.quantity} sold',
-        style: AppConstants.bodySmall,
-      ),
-      trailing: Text(
-        Formatters.formatCurrency(item.revenue),
+      title: Text(item.name, style: AppConstants.bodyLarge),
+      subtitle: Text('${item.quantity} sold', style: AppConstants.bodySmall),
+      trailing: CurrencyTextHelper.buildCurrencyText(
+        formattedValue: Formatters.formatCurrency(item.revenue),
         style: AppConstants.bodyLarge.copyWith(
           color: AppConstants.successGreen,
           fontWeight: FontWeight.bold,

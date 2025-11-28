@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../services/transaction_service.dart';
 import '../utils/constants.dart';
+import '../utils/currency_text.dart';
 import '../utils/formatters.dart';
 
 class TransactionHistoryScreen extends StatefulWidget {
@@ -274,26 +275,35 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Order ${transaction.orderId}',
-                            style: AppConstants.bodyLarge,
+                          Expanded(
+                            child: Text(
+                              'Order ${transaction.orderId}',
+                              style: AppConstants.bodyLarge,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: amountColor.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              transaction.paymentMethod,
-                              style: AppConstants.bodySmall.copyWith(
-                                color: amountColor,
-                                fontWeight: FontWeight.bold,
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: amountColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                transaction.paymentMethod,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: AppConstants.bodySmall.copyWith(
+                                  color: amountColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ),
@@ -318,12 +328,13 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                     ],
                   ),
                 ),
-                Text(
-                  Formatters.formatCurrency(amountValue),
+                CurrencyTextHelper.buildCurrencyText(
+                  formattedValue: Formatters.formatCurrency(amountValue),
                   style: AppConstants.bodyLarge.copyWith(
                     color: amountColor,
                     fontWeight: FontWeight.bold,
                   ),
+                  textAlign: TextAlign.right,
                 ),
               ],
             ),
@@ -409,8 +420,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          Formatters.formatCurrency(
+                        CurrencyTextHelper.buildCurrencyText(
+                          formattedValue: Formatters.formatCurrency(
                             transaction.saleAmount.abs(),
                           ),
                           style: AppConstants.headingLarge.copyWith(
@@ -447,13 +458,10 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                   else
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: _groupItemsByCategory(transaction.items)
-                          .entries
+                      children: _groupItemsByCategory(transaction.items).entries
                           .map(
-                            (entry) => _buildCategorySection(
-                              entry.key,
-                              entry.value,
-                            ),
+                            (entry) =>
+                                _buildCategorySection(entry.key, entry.value),
                           )
                           .toList(),
                     ),
@@ -527,10 +535,9 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
           (match) => '${match.group(1)} ${match.group(2)}',
         );
     final words = spaced
-      .split(RegExp(r'\s+'))
+        .split(RegExp(r'\s+'))
         .where((word) => word.isNotEmpty)
-        .map((word) =>
-            word[0].toUpperCase() + word.substring(1).toLowerCase())
+        .map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase())
         .toList();
     return words.join(' ');
   }
@@ -575,17 +582,29 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(item.name, style: AppConstants.bodyMedium),
-                Text(
-                  '${Formatters.formatCurrency(item.price)} each',
-                  style: AppConstants.bodySmall.copyWith(
-                    color: AppConstants.textSecondary,
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      CurrencyTextHelper.buildCurrencySpan(
+                        formattedValue: Formatters.formatCurrency(item.price),
+                        style: AppConstants.bodySmall.copyWith(
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' each',
+                        style: AppConstants.bodySmall.copyWith(
+                          color: AppConstants.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          Text(
-            Formatters.formatCurrency(item.totalPrice),
+          CurrencyTextHelper.buildCurrencyText(
+            formattedValue: Formatters.formatCurrency(item.totalPrice),
             style: AppConstants.bodyMedium.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -607,12 +626,19 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               color: AppConstants.textSecondary,
             ),
           ),
-          Text(
-            value,
-            style: AppConstants.bodyMedium.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+            CurrencyTextHelper.isCurrencyValue(value)
+              ? CurrencyTextHelper.buildCurrencyText(
+                  formattedValue: value,
+                  style: AppConstants.bodyMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                )
+              : Text(
+                  value,
+                  style: AppConstants.bodyMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
         ],
       ),
     );
@@ -711,8 +737,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
               ),
             ],
           ),
-          Text(
-            Formatters.formatCurrency(totalAmount),
+          CurrencyTextHelper.buildCurrencyText(
+            formattedValue: Formatters.formatCurrency(totalAmount),
             style: AppConstants.headingSmall.copyWith(
               color: totalAmount >= 0
                   ? AppConstants.successGreen

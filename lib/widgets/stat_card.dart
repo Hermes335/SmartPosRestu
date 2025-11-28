@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
+import '../utils/currency_text.dart';
 
 /// Reusable stat card widget for displaying key metrics
 class StatCard extends StatelessWidget {
@@ -29,10 +30,7 @@ class StatCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppConstants.cardBackground,
           borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
-          border: Border.all(
-            color: AppConstants.dividerColor,
-            width: 1,
-          ),
+          border: Border.all(color: AppConstants.dividerColor, width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,11 +38,7 @@ class StatCard extends StatelessWidget {
             // Icon and title on the same row
             Row(
               children: [
-                Icon(
-                  icon,
-                  color: AppConstants.textSecondary,
-                  size: 24,
-                ),
+                Icon(icon, color: AppConstants.textSecondary, size: 24),
                 const SizedBox(width: AppConstants.paddingSmall),
                 Expanded(
                   child: Text(
@@ -64,20 +58,30 @@ class StatCard extends StatelessWidget {
             ),
             const SizedBox(height: AppConstants.paddingMedium),
             // Value (large text)
-            Text(
-              value,
-              style: AppConstants.headingLarge.copyWith(
-                color: AppConstants.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
+            Builder(
+              builder: (context) {
+                final valueStyle = AppConstants.headingLarge.copyWith(
+                  color: AppConstants.textPrimary,
+                  fontWeight: FontWeight.bold,
+                );
+                if (CurrencyTextHelper.isCurrencyValue(value)) {
+                  return CurrencyTextHelper.buildCurrencyText(
+                    formattedValue: value,
+                    style: valueStyle,
+                  );
+                }
+                return Text(value, style: valueStyle);
+              },
             ),
             // Percentage change (if provided)
-            if (percentageChange != null && percentageChange!.trim().isNotEmpty) ...[
+            if (percentageChange != null &&
+                percentageChange!.trim().isNotEmpty) ...[
               const SizedBox(height: AppConstants.paddingSmall),
               Builder(
                 builder: (context) {
                   final trimmed = percentageChange!.trim();
-                  final isDelta = trimmed.startsWith('+') || trimmed.startsWith('-');
+                  final isDelta =
+                      trimmed.startsWith('+') || trimmed.startsWith('-');
                   if (!isDelta) {
                     return Text(
                       percentageChange!,
@@ -89,7 +93,9 @@ class StatCard extends StatelessWidget {
                   }
 
                   final isPositive = trimmed.startsWith('+');
-                  final color = isPositive ? AppConstants.successGreen : Colors.red;
+                  final color = isPositive
+                      ? AppConstants.successGreen
+                      : Colors.red;
 
                   return Row(
                     children: [
